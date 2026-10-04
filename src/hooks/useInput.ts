@@ -1,23 +1,19 @@
-import { useState, ChangeEvent } from "react";
+import { useCallback, useState } from 'react';
+import type { ChangeEvent } from 'react';
 
-type InputReturn = [
+type InputElement = HTMLInputElement | HTMLTextAreaElement;
+
+/** Hook two-way binding untuk elemen input / textarea. */
+export function useInput(defaultValue: string): [
   string,
-  (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void,
-  () => void
-];
+  (event: ChangeEvent<InputElement>) => void,
+  (value: string) => void,
+] {
+  const [value, setValue] = useState(defaultValue);
 
-export const useInput = (defaultValue: string = ""): InputReturn => {
-  const [value, setValue] = useState<string>(defaultValue);
-
-  const onValueChangeHandler = (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = useCallback((event: ChangeEvent<InputElement>) => {
     setValue(event.target.value);
-  };
+  }, []);
 
-  const resetValue = () => {
-    setValue("");
-  };
-
-  return [value, onValueChangeHandler, resetValue];
-};
+  return [value, handleChange, setValue];
+}

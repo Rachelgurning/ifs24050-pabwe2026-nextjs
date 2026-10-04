@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ifs24050-pabwe2026-nextjs — Ruang Post
 
-## Getting Started
+Aplikasi Postingan (PABWE 2026, tugas 2.2) berbasis **Next.js (App Router) + TypeScript + Tailwind CSS v4**,
+memakai REST API Delcom (`https://open-api.delcom.org/api/v1`), state management Redux Toolkit,
+SweetAlert2, react-icons, dan Google Font (Bricolage Grotesque).
 
-First, run the development server:
+## Menjalankan di VSCode / lokal
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install            # memasang dependensi
+bun run dev            # development (Turbopack) -> http://localhost:3000
+bun run serve          # launcher src/server.ts, port dari APP_PORT pada .env
+bun run build && bun run start   # produksi
+bun run lint           # ESLint
+bun run test           # Vitest + coverage v8 (threshold 100%)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Berkas `.env` (contoh: `.env.example`):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_DELCOM_BASEURL=https://open-api.delcom.org/api/v1
+APP_PORT=3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Halaman
 
-## Learn More
+| Path | Akses | Keterangan |
+| --- | --- | --- |
+| `/auth/login` | publik | Login (`#login-email-input`, `#login-password-input`, `#login-submit-button`) |
+| `/auth/register` | publik | Registrasi akun |
+| `/` | login | Linimasa postingan, filter "Milik saya" (`?filter=me`), live search, tambah postingan |
+| `/posts/[postId]` | login | Detail, like, komentar, ubah/hapus postingan, ubah cover |
+| `/users` | login | Direktori pengguna + pencarian |
+| `/profile` | login | Ubah profil, foto, dan kata sandi |
 
-To learn more about Next.js, take a look at the following resources:
+## Optimasi performa (Lighthouse)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `next.config.ts` → `experimental.inlineCss: true`: CSS disisipkan ke HTML sehingga tidak ada render-blocking request.
+- `next.config.ts` → `turbopack.resolveAlias`: polyfill legacy bawaan Next diganti `polyfills/modern-polyfills.js`
+  (hanya `URL.canParse`), karena fitur lain sudah native di browser modern (menghilangkan audit "Legacy JavaScript").
+- SweetAlert2 dimuat secara lazy (`import()`), gambar memakai `width`/`height` + `loading="lazy"`.
