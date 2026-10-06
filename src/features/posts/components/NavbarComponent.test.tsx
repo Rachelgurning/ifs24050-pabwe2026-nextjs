@@ -1,76 +1,149 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent } from "@testing-library/react";
+import NavbarComponent from "./NavbarComponent";
+import { renderWithProviders } from "../../../test-utils";
 
-vi.mock('@/features/auth/api/authApi');
-vi.mock('@/helpers/toolsHelper', () => ({
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showConfirmDialog: vi.fn(),
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+  useParams: () => ({}),
 }));
 
-import { getAccessToken, putAccessToken } from '@/helpers/apiHelper';
-import { showConfirmDialog } from '@/helpers/toolsHelper';
-import { logoutUser } from '@/features/auth/api/authApi';
-import NavbarComponent from '@/features/posts/components/NavbarComponent';
-import { routerMock } from '@/navigationMock';
-import { makeUser, ok, renderWithProviders } from '@/test-utils';
+describe("NavbarComponent", () => {
+  const mockProfileWithPhoto = {
+    name: "Abdullah",
+    email: "abdullah@delcom.org",
+    photo: "https://example.com/photo.jpg",
+  };
 
-describe('NavbarComponent', () => {
-  beforeEach(() => vi.clearAllMocks());
+  const mockProfileWithoutPhoto = {
+    name: "Ubaid",
+    email: "ubaid@delcom.org",
+    photo: null,
+  };
 
-  it('menampilkan identitas profil aktif dan menu akun', async () => {
-    renderWithProviders(<NavbarComponent onMenuClick={vi.fn()} />, { profile: makeUser() });
-    expect(screen.getByText('Stiy Del')).toBeInTheDocument();
-    expect(screen.queryByText('ifs24050@del.ac.id')).not.toBeInTheDocument();
+  const mockProfileEmpty = {
+    name: "",
+    email: "",
+    photo: null,
+  };
 
-    const toggle = screen.getByRole('button', { name: 'Menu akun Stiy Del' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('ifs24050@del.ac.id')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Profil Saya' })).toHaveAttribute('href', '/profile');
-
-    await userEvent.click(screen.getByRole('link', { name: 'Profil Saya' }));
-    expect(screen.queryByText('ifs24050@del.ac.id')).not.toBeInTheDocument();
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('tombol hamburger memanggil onMenuClick', async () => {
-    const onMenuClick = vi.fn();
-    renderWithProviders(<NavbarComponent onMenuClick={onMenuClick} />, { profile: makeUser() });
-    await userEvent.click(screen.getByRole('button', { name: 'Buka menu navigasi' }));
-    expect(onMenuClick).toHaveBeenCalled();
+  it("should render profile photo and name correctly", () => {
+    const handleLogout = vi.fn();
+    const onToggleSidebar = vi.fn();
+
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileWithPhoto}
+        handleLogout={handleLogout}
+        onToggleSidebar={onToggleSidebar}
+        isSidebarOpen={false}
+      />
+    );
+
+    expect(screen.getByText("Abdullah")).toBeInTheDocument();
+    expect(screen.getByText("abdullah@delcom.org")).toBeInTheDocument();
   });
 
-  it('logout dikonfirmasi: token dihapus dan menuju login', async () => {
-    putAccessToken('tok');
-    vi.mocked(showConfirmDialog).mockResolvedValue(true);
-    vi.mocked(logoutUser).mockResolvedValue(ok(undefined, 'Berhasil logout'));
-    const { store } = renderWithProviders(<NavbarComponent onMenuClick={vi.fn()} />, {
-      profile: makeUser(),
-      isProfile: true,
-    });
-    await userEvent.click(screen.getByRole('button', { name: 'Menu akun Stiy Del' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Keluar' }));
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'));
-    expect(getAccessToken()).toBeNull();
-    expect(store.getState().profile).toBeNull();
+  it("should render avatar initial fallback when photo is null", () => {
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileWithoutPhoto}
+        handleLogout={vi.fn()}
+        onToggleSidebar={vi.fn()}
+        isSidebarOpen={true}
+      />
+    );
+
+    expect(screen.getByText("U")).toBeInTheDocument();
   });
 
-  it('logout dibatalkan tidak melakukan apa pun', async () => {
-    putAccessToken('tok');
-    vi.mocked(showConfirmDialog).mockResolvedValue(false);
-    renderWithProviders(<NavbarComponent onMenuClick={vi.fn()} />, { profile: makeUser() });
-    await userEvent.click(screen.getByRole('button', { name: 'Menu akun Stiy Del' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Keluar' }));
-    await waitFor(() => expect(showConfirmDialog).toHaveBeenCalled());
-    expect(logoutUser).not.toHaveBeenCalled();
-    expect(getAccessToken()).toBe('tok');
-    expect(routerMock.replace).not.toHaveBeenCalled();
+  it("should render default Pengguna fallback when name and email are empty", () => {
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileEmpty}
+        handleLogout={vi.fn()}
+        onToggleSidebar={vi.fn()}
+        isSidebarOpen={false}
+      />
+    );
+
+    expect(screen.getByText("Pengguna")).toBeInTheDocument();
   });
 
-  it('tetap tampil saat profil belum tersedia', async () => {
-    renderWithProviders(<NavbarComponent onMenuClick={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Menu akun' })).toBeInTheDocument();
+  it("should toggle sidebar on mobile menu button click", () => {
+    const onToggleSidebar = vi.fn();
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileWithPhoto}
+        handleLogout={vi.fn()}
+        onToggleSidebar={onToggleSidebar}
+        isSidebarOpen={false}
+      />
+    );
+
+    const toggleBtn = screen.getByTestId("toggle-sidebar-btn");
+    fireEvent.click(toggleBtn);
+    expect(onToggleSidebar).toHaveBeenCalled();
+  });
+
+  it("should open and close profile dropdown menu, navigate to profile and call logout", () => {
+    const handleLogout = vi.fn();
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileWithPhoto}
+        handleLogout={handleLogout}
+        onToggleSidebar={vi.fn()}
+        isSidebarOpen={false}
+      />
+    );
+
+    const dropdownBtn = screen.getByTestId("profile-dropdown-button");
+    fireEvent.click(dropdownBtn);
+    expect(screen.getByTestId("profile-dropdown-menu")).toBeInTheDocument();
+
+    // Click profile link in dropdown
+    const profileLink = screen.getByTestId("dropdown-profile-link");
+    fireEvent.click(profileLink);
+    expect(mockPush).toHaveBeenCalledWith("/profile");
+
+    // Open again to click logout
+    fireEvent.click(dropdownBtn);
+    const logoutBtn = screen.getByTestId("dropdown-logout-button");
+    fireEvent.click(logoutBtn);
+    expect(handleLogout).toHaveBeenCalled();
+  });
+
+  it("should close dropdown when clicking outside", () => {
+    renderWithProviders(
+      <NavbarComponent
+        profile={mockProfileWithPhoto}
+        handleLogout={vi.fn()}
+        onToggleSidebar={vi.fn()}
+        isSidebarOpen={false}
+      />
+    );
+
+    const dropdownBtn = screen.getByTestId("profile-dropdown-button");
+    fireEvent.click(dropdownBtn);
+    expect(screen.getByTestId("profile-dropdown-menu")).toBeInTheDocument();
+
+    // Simulate clicking outside
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId("profile-dropdown-menu")).not.toBeInTheDocument();
+
+    // Simulate clicking inside without closing
+    fireEvent.click(dropdownBtn);
+    fireEvent.mouseDown(dropdownBtn);
   });
 });

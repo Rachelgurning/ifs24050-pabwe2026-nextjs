@@ -1,11 +1,5 @@
-import type { Metadata } from 'next';
-import ProfilePage from '@/features/users/pages/ProfilePage';
+"use client";
 
-export const metadata: Metadata = {
-  title: 'Profil Saya',
-  description: 'Kelola profil, foto, dan kata sandi akun Ruang Post Anda.',
-};
+import ProfilePage from "@/features/users/pages/ProfilePage";
 
-export default function Page() {
-  return <ProfilePage />;
-}
+export default ProfilePage;

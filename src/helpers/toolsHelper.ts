@@ -1,67 +1,70 @@
-const BRAND_COLOR = '#0b6b8a';
-const DANGER_COLOR = '#b42318';
+import Swal from "sweetalert2";
 
-async function getSwal() {
-  // Dimuat secara lazy agar bundle awal tetap kecil (Lighthouse Performance).
-  return (await import('sweetalert2')).default;
-}
-
-export async function showSuccessDialog(message: string): Promise<void> {
-  const Swal = await getSwal();
-  await Swal.fire({
-    icon: 'success',
-    title: 'Berhasil',
+export function showErrorDialog(message) {
+  return Swal.fire({
+    title: "Terjadi Kesalahan",
     text: message,
-    confirmButtonText: 'Tutup',
-    confirmButtonColor: BRAND_COLOR,
+    icon: "error",
+    confirmButtonText: "Tutup",
+    confirmButtonColor: "#ef4444",
+  }).then((result) => {
+    if (result.isConfirmed) {
+      Swal.close();
+    }
+    return result;
   });
 }
 
-export async function showErrorDialog(message: string): Promise<void> {
-  const Swal = await getSwal();
-  await Swal.fire({
-    icon: 'error',
-    title: 'Terjadi Kesalahan',
+export function showWarningDialog(message) {
+  return Swal.fire({
+    title: "Peringatan",
     text: message,
-    confirmButtonText: 'Tutup',
-    confirmButtonColor: DANGER_COLOR,
+    icon: "warning",
+    confirmButtonText: "Tutup",
+    confirmButtonColor: "#f59e0b",
+  }).then((result) => {
+    if (result.isConfirmed) {
+      Swal.close();
+    }
+    return result;
   });
 }
 
-export async function showWarningDialog(message: string): Promise<void> {
-  const Swal = await getSwal();
-  await Swal.fire({
-    icon: 'warning',
-    title: 'Perhatian',
+export function showSuccessDialog(message) {
+  return Swal.fire({
+    title: "Tindakan Berhasil",
     text: message,
-    confirmButtonText: 'Mengerti',
-    confirmButtonColor: BRAND_COLOR,
+    icon: "success",
+    confirmButtonText: "Tutup",
+    confirmButtonColor: "#10b981",
+  }).then((result) => {
+    if (result.isConfirmed) {
+      Swal.close();
+    }
+    return result;
   });
 }
 
-export async function showConfirmDialog(title: string, message: string): Promise<boolean> {
-  const Swal = await getSwal();
-  const result = await Swal.fire({
-    icon: 'question',
-    title,
+export function showConfirmDialog(message) {
+  return Swal.fire({
+    title: "Konfirmasi",
     text: message,
+    icon: "question",
     showCancelButton: true,
-    confirmButtonText: 'Ya, lanjutkan',
-    cancelButtonText: 'Batal',
-    confirmButtonColor: DANGER_COLOR,
-    cancelButtonColor: '#475569',
-    reverseButtons: true,
+    confirmButtonText: "Ya",
+    cancelButtonText: "Tidak",
+    confirmButtonColor: "#6366f1",
+    cancelButtonColor: "#94a3b8",
   });
-  return result.isConfirmed;
 }
 
-/** Memformat tanggal ISO menjadi tanggal & waktu bahasa Indonesia. */
-export function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+export function formatDate(date) {
+  if (!date) return "-";
+  return new Date(date).toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }

@@ -1,59 +1,54 @@
-import { describe, expect, it } from 'vitest';
-import { AuthActionType } from '@/features/auth/states/action';
-import {
-  PostActionType,
-  clearPostActionCreator,
-  postMutationActionCreator,
-  receivePostActionCreator,
-  receivePostsActionCreator,
-} from '@/features/posts/states/action';
-import * as reducers from '@/features/posts/states/reducer';
-import { makePost, makePostDetail } from '@/test-utils';
+import { describe, it, expect } from "vitest";
+import * as reducers from "./reducer";
+import { ActionType } from "./action";
 
-const logout = { type: AuthActionType.LOGOUT };
+const flagPairs: [keyof typeof reducers, string][] = [
+  ["isPostReducer", ActionType.SET_IS_POST],
+  ["isPostAddReducer", ActionType.SET_IS_POST_ADD],
+  ["isPostAddedReducer", ActionType.SET_IS_POST_ADDED],
+  ["isPostChangeReducer", ActionType.SET_IS_POST_CHANGE],
+  ["isPostChangedReducer", ActionType.SET_IS_POST_CHANGED],
+  ["isPostChangeCoverReducer", ActionType.SET_IS_POST_CHANGE_COVER],
+  ["isPostChangedCoverReducer", ActionType.SET_IS_POST_CHANGED_COVER],
+  ["isPostDeleteReducer", ActionType.SET_IS_POST_DELETE],
+  ["isPostDeletedReducer", ActionType.SET_IS_POST_DELETED],
+  ["isPostLikeReducer", ActionType.SET_IS_POST_LIKE],
+  ["isPostLikedReducer", ActionType.SET_IS_POST_LIKED],
+  ["isPostAddCommentReducer", ActionType.SET_IS_POST_ADD_COMMENT],
+  ["isPostAddedCommentReducer", ActionType.SET_IS_POST_ADDED_COMMENT],
+  ["isPostDeleteCommentReducer", ActionType.SET_IS_POST_DELETE_COMMENT],
+  ["isPostDeletedCommentReducer", ActionType.SET_IS_POST_DELETED_COMMENT],
+  ["isPostDeleteAllReducer", ActionType.SET_IS_POST_DELETE_ALL],
+  ["isPostDeletedAllReducer", ActionType.SET_IS_POST_DELETED_ALL],
+];
 
-describe('posts reducers', () => {
-  it('posts', () => {
-    const list = [makePost()];
-    expect(reducers.posts(undefined, { type: 'x' })).toEqual([]);
-    expect(reducers.posts([], receivePostsActionCreator(list))).toBe(list);
-    expect(reducers.posts(list, logout)).toEqual([]);
+describe("post reducers", () => {
+  it("should return default states", () => {
+    expect(reducers.postsReducer(undefined, {})).toEqual([]);
+    expect(reducers.postsReducer(undefined)).toEqual([]);
+    expect(reducers.postReducer(undefined, {})).toBeNull();
+    flagPairs.forEach(([name]) => {
+      expect((reducers[name] as (s: undefined, a: object) => boolean)(undefined, {})).toBe(false);
+    });
   });
 
-  it('post', () => {
-    const detail = makePostDetail();
-    expect(reducers.post(undefined, { type: 'x' })).toBeNull();
-    expect(reducers.post(null, receivePostActionCreator(detail))).toBe(detail);
-    expect(reducers.post(detail, clearPostActionCreator())).toBeNull();
-    expect(reducers.post(detail, logout)).toBeNull();
-    expect(PostActionType.CLEAR_POST).toBe('posts/clearPost');
+  it("should keep state for unrelated actions", () => {
+    expect(reducers.postsReducer([], { type: "OTHER" })).toEqual([]);
   });
 
-  it.each([
-    ['fetch', reducers.isPost, undefined],
-    ['add', reducers.isPostAdd, reducers.isPostAdded],
-    ['change', reducers.isPostChange, reducers.isPostChanged],
-    ['changeCover', reducers.isPostChangeCover, reducers.isPostChangedCover],
-    ['delete', reducers.isPostDelete, reducers.isPostDeleted],
-    ['like', reducers.isPostLike, reducers.isPostLiked],
-    ['addComment', reducers.isPostAddComment, reducers.isPostAddedComment],
-    ['deleteComment', reducers.isPostDeleteComment, reducers.isPostDeletedComment],
-    ['deleteAll', reducers.isPostDeleteAll, reducers.isPostDeletedAll],
-  ] as const)('flag %s', (name, loading, done) => {
-    const request = postMutationActionCreator(name, 'request');
-    const success = postMutationActionCreator(name, 'success');
-    const failure = postMutationActionCreator(name, 'failure');
-    const reset = postMutationActionCreator(name, 'reset');
+  it("should handle collection and detail actions", () => {
+    expect(
+      reducers.postsReducer([], { type: ActionType.SET_POSTS, payload: [{ id: 1 }] } as never)
+    ).toEqual([{ id: 1 }]);
+    expect(
+      reducers.postReducer(null, { type: ActionType.SET_POST, payload: { id: 2 } } as never)
+    ).toEqual({ id: 2 });
+  });
 
-    expect(loading(false, request)).toBe(true);
-    expect(loading(true, success)).toBe(false);
-    expect(loading(true, failure)).toBe(false);
-
-    if (done) {
-      expect(done(false, success)).toBe(true);
-      expect(done(true, request)).toBe(false);
-      expect(done(true, failure)).toBe(false);
-      expect(done(true, reset)).toBe(false);
-    }
+  it("should handle every status flag action", () => {
+    flagPairs.forEach(([name, type]) => {
+      const reducer = reducers[name] as (s: boolean, a: object) => boolean;
+      expect(reducer(false, { type, payload: true })).toBe(true);
+    });
   });
 });

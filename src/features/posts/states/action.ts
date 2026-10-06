@@ -1,173 +1,210 @@
-import { callApi, runMutation } from '@/helpers/thunkHelper';
-import { showSuccessDialog } from '@/helpers/toolsHelper';
+import type { AppAction } from "@/types/action";
+import type { Post } from "@/types";
 import {
-  addComment,
-  addPost,
-  changePost,
-  changePostCover,
-  deleteAllPosts,
-  deleteComment,
-  deletePost,
-  getPost,
-  getPosts,
-  likePost,
-} from '@/features/posts/api/postApi';
-import type { AppDispatch } from '@/store';
-import type { Post, PostDetail } from '@/types';
-import type { AppAction, MutationPhase } from '@/types/action';
+  showErrorDialog,
+  showSuccessDialog,
+} from "../../../helpers/toolsHelper";
+import postApi from "../api/postApi";
 
-export const PostActionType = {
-  RECEIVE_POSTS: 'posts/receivePosts',
-  RECEIVE_POST: 'posts/receivePost',
-  CLEAR_POST: 'posts/clearPost',
-} as const;
+type Dispatcher = (action: AppAction) => unknown;
 
-export type PostMutation =
-  | 'fetch'
-  | 'add'
-  | 'change'
-  | 'changeCover'
-  | 'delete'
-  | 'like'
-  | 'addComment'
-  | 'deleteComment'
-  | 'deleteAll';
+export const ActionType = {
+  SET_POSTS: "SET_POSTS",
+  SET_POST: "SET_POST",
+  SET_IS_POST: "SET_IS_POST",
+  SET_IS_POST_ADD: "SET_IS_POST_ADD",
+  SET_IS_POST_ADDED: "SET_IS_POST_ADDED",
+  SET_IS_POST_CHANGE: "SET_IS_POST_CHANGE",
+  SET_IS_POST_CHANGED: "SET_IS_POST_CHANGED",
+  SET_IS_POST_CHANGE_COVER: "SET_IS_POST_CHANGE_COVER",
+  SET_IS_POST_CHANGED_COVER: "SET_IS_POST_CHANGED_COVER",
+  SET_IS_POST_DELETE: "SET_IS_POST_DELETE",
+  SET_IS_POST_DELETED: "SET_IS_POST_DELETED",
+  SET_IS_POST_LIKE: "SET_IS_POST_LIKE",
+  SET_IS_POST_LIKED: "SET_IS_POST_LIKED",
+  SET_IS_POST_ADD_COMMENT: "SET_IS_POST_ADD_COMMENT",
+  SET_IS_POST_ADDED_COMMENT: "SET_IS_POST_ADDED_COMMENT",
+  SET_IS_POST_DELETE_COMMENT: "SET_IS_POST_DELETE_COMMENT",
+  SET_IS_POST_DELETED_COMMENT: "SET_IS_POST_DELETED_COMMENT",
+  SET_IS_POST_DELETE_ALL: "SET_IS_POST_DELETE_ALL",
+  SET_IS_POST_DELETED_ALL: "SET_IS_POST_DELETED_ALL",
+};
 
-export const postMutationType = (name: PostMutation, phase: MutationPhase) =>
-  `posts/${name}/${phase}`;
+// ---------------------------------------------------------------------------
+// Collection & detail
+// ---------------------------------------------------------------------------
+export function setPostsActionCreator(posts: Post[]) {
+  return { type: ActionType.SET_POSTS, payload: posts };
+}
 
-export const receivePostsActionCreator = (posts: Post[]): AppAction<Post[]> => ({
-  type: PostActionType.RECEIVE_POSTS,
-  payload: posts,
-});
-
-export const receivePostActionCreator = (post: PostDetail): AppAction<PostDetail> => ({
-  type: PostActionType.RECEIVE_POST,
-  payload: post,
-});
-
-export const clearPostActionCreator = (): AppAction => ({ type: PostActionType.CLEAR_POST });
-
-export const postMutationActionCreator = (name: PostMutation, phase: MutationPhase): AppAction => ({
-  type: postMutationType(name, phase),
-});
-
-/** Memuat daftar postingan. `showLoading` = tampilkan indikator muat (false saat refresh senyap). */
-export function asyncReceivePosts(isMe: boolean, showLoading: boolean) {
-  return async (dispatch: AppDispatch): Promise<void> => {
-    if (showLoading) dispatch(postMutationActionCreator('fetch', 'request'));
-    const result = await callApi(() => getPosts(isMe), false);
-    if (result) dispatch(receivePostsActionCreator(result.data!.posts));
-    dispatch(postMutationActionCreator('fetch', result ? 'success' : 'failure'));
+export function asyncSetPosts(isMe = false) {
+  return async (dispatch: Dispatcher) => {
+    try {
+      const posts = await postApi.getPosts(isMe);
+      dispatch(setPostsActionCreator(posts));
+    } catch {
+      dispatch(setPostsActionCreator([]));
+    }
   };
 }
 
-export function asyncReceivePost(postId: number, showLoading: boolean) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    if (showLoading) dispatch(postMutationActionCreator('fetch', 'request'));
-    const result = await callApi(() => getPost(postId), false);
-    if (result) dispatch(receivePostActionCreator(result.data!.post));
-    dispatch(postMutationActionCreator('fetch', result ? 'success' : 'failure'));
-    return result !== null;
+export function setPostActionCreator(post: Post | null | undefined) {
+  return { type: ActionType.SET_POST, payload: post };
+}
+
+export function setIsPostActionCreator(status: boolean) {
+  return { type: ActionType.SET_IS_POST, payload: status };
+}
+
+export function asyncSetPost(postId: number | string) {
+  return async (dispatch: Dispatcher) => {
+    try {
+      const post = await postApi.getPostById(postId);
+      dispatch(setPostActionCreator(post));
+    } catch {
+      dispatch(setPostActionCreator(null));
+    } finally {
+      dispatch(setIsPostActionCreator(true));
+    }
   };
 }
 
-/** Menambah postingan; mengembalikan id postingan baru atau null bila gagal. */
-export function asyncAddPost(description: string) {
-  return async (dispatch: AppDispatch): Promise<number | null> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('add', phase),
-      () => addPost(description),
-    );
-    if (!result) return null;
-    await showSuccessDialog(result.message);
-    return result.data!.post_id;
+// ---------------------------------------------------------------------------
+// Mutations: each pair of flags is "<is>Action" (finished) and "<is>Actioned"
+// (finished successfully), mirroring the other features of the app.
+// ---------------------------------------------------------------------------
+function mutation(
+  call: () => Promise<string | unknown>,
+  setSucceeded: (value: boolean) => AppAction,
+  setFinished: (value: boolean) => AppAction,
+  options: { silent?: boolean; successMessage?: string } = {}
+) {
+  return async (dispatch: Dispatcher) => {
+    try {
+      const message = await call();
+      if (!options.silent) {
+        showSuccessDialog(options.successMessage || String(message));
+      }
+      dispatch(setSucceeded(true));
+    } catch (error) {
+      showErrorDialog(error.message);
+      dispatch(setSucceeded(false));
+    } finally {
+      dispatch(setFinished(true));
+    }
   };
 }
 
-export function asyncChangePost(postId: number, description: string) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('change', phase),
-      () => changePost(postId, description),
-    );
-    if (!result) return false;
-    await showSuccessDialog(result.message);
-    return true;
-  };
+export function setIsPostAddActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_ADD, payload: value };
+}
+export function setIsPostAddedActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_ADDED, payload: value };
+}
+export function asyncSetIsPostAdd(description: string) {
+  return mutation(
+    () => postApi.postPost(description),
+    setIsPostAddedActionCreator,
+    setIsPostAddActionCreator,
+    { successMessage: "Postingan berhasil dipublikasikan!" }
+  );
 }
 
-export function asyncChangePostCover(postId: number, cover: File) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('changeCover', phase),
-      () => changePostCover(postId, cover),
-    );
-    if (!result) return false;
-    await showSuccessDialog(result.message);
-    return true;
-  };
+export function setIsPostChangeActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_CHANGE, payload: value };
+}
+export function setIsPostChangedActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_CHANGED, payload: value };
+}
+export function asyncSetIsPostChange(postId: number | string, description: string) {
+  return mutation(
+    () => postApi.putPost(postId, description),
+    setIsPostChangedActionCreator,
+    setIsPostChangeActionCreator
+  );
 }
 
-export function asyncDeletePost(postId: number) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('delete', phase),
-      () => deletePost(postId),
-    );
-    if (!result) return false;
-    await showSuccessDialog(result.message);
-    return true;
-  };
+export function setIsPostChangeCoverActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_CHANGE_COVER, payload: value };
+}
+export function setIsPostChangedCoverActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_CHANGED_COVER, payload: value };
+}
+export function asyncSetIsPostChangeCover(postId: number | string, cover: File) {
+  return mutation(
+    () => postApi.postPostCover(postId, cover),
+    setIsPostChangedCoverActionCreator,
+    setIsPostChangeCoverActionCreator
+  );
 }
 
-/** Memberi (like = true) atau membatalkan (like = false) suka. */
-export function asyncLikePost(postId: number, like: boolean) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('like', phase),
-      () => likePost(postId, like),
-    );
-    return result !== null;
-  };
+export function setIsPostDeleteActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETE, payload: value };
+}
+export function setIsPostDeletedActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETED, payload: value };
+}
+export function asyncSetIsPostDelete(postId: number | string) {
+  return mutation(
+    () => postApi.deletePost(postId),
+    setIsPostDeletedActionCreator,
+    setIsPostDeleteActionCreator
+  );
 }
 
-export function asyncAddComment(postId: number, comment: string) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('addComment', phase),
-      () => addComment(postId, comment),
-    );
-    return result !== null;
-  };
+export function setIsPostLikeActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_LIKE, payload: value };
+}
+export function setIsPostLikedActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_LIKED, payload: value };
+}
+export function asyncSetIsPostLike(postId: number | string, like: boolean) {
+  return mutation(
+    () => postApi.postPostLike(postId, like),
+    setIsPostLikedActionCreator,
+    setIsPostLikeActionCreator,
+    { silent: true }
+  );
 }
 
-export function asyncDeleteComment(postId: number) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('deleteComment', phase),
-      () => deleteComment(postId),
-    );
-    return result !== null;
-  };
+export function setIsPostAddCommentActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_ADD_COMMENT, payload: value };
+}
+export function setIsPostAddedCommentActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_ADDED_COMMENT, payload: value };
+}
+export function asyncSetIsPostAddComment(postId: number | string, comment: string) {
+  return mutation(
+    () => postApi.postPostComment(postId, comment),
+    setIsPostAddedCommentActionCreator,
+    setIsPostAddCommentActionCreator
+  );
 }
 
-export function asyncDeleteAllPosts() {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => postMutationActionCreator('deleteAll', phase),
-      () => deleteAllPosts(),
-    );
-    if (!result) return false;
-    await showSuccessDialog(result.message);
-    return true;
-  };
+export function setIsPostDeleteCommentActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETE_COMMENT, payload: value };
+}
+export function setIsPostDeletedCommentActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETED_COMMENT, payload: value };
+}
+export function asyncSetIsPostDeleteComment(postId: number | string) {
+  return mutation(
+    () => postApi.deletePostComment(postId),
+    setIsPostDeletedCommentActionCreator,
+    setIsPostDeleteCommentActionCreator
+  );
+}
+
+export function setIsPostDeleteAllActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETE_ALL, payload: value };
+}
+export function setIsPostDeletedAllActionCreator(value: boolean) {
+  return { type: ActionType.SET_IS_POST_DELETED_ALL, payload: value };
+}
+export function asyncSetIsPostDeleteAll() {
+  return mutation(
+    () => postApi.deleteAllPosts(),
+    setIsPostDeletedAllActionCreator,
+    setIsPostDeleteAllActionCreator
+  );
 }

@@ -1,66 +1,79 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent, act } from "@testing-library/react";
+import RegisterPage from "./RegisterPage";
+import { renderWithProviders } from "../../../test-utils";
+import * as authAction from "../states/action";
 
-vi.mock('@/features/auth/api/authApi');
-vi.mock('@/helpers/toolsHelper', () => ({
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showWarningDialog: vi.fn(),
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/auth/register",
+  useParams: () => ({}),
 }));
 
-import { showWarningDialog } from '@/helpers/toolsHelper';
-import { registerUser } from '@/features/auth/api/authApi';
-import RegisterPage from '@/features/auth/pages/RegisterPage';
-import { routerMock } from '@/navigationMock';
-import { fail, ok, renderWithProviders } from '@/test-utils';
-
-async function fill(values: { name?: string; email?: string; password?: string; confirmation?: string }) {
-  const { name = '', email = '', password = '', confirmation = '' } = values;
-  if (name) await userEvent.type(screen.getByLabelText('Nama lengkap'), name);
-  if (email) await userEvent.type(screen.getByLabelText('Email'), email);
-  if (password) await userEvent.type(screen.getByLabelText('Kata sandi'), password);
-  if (confirmation) await userEvent.type(screen.getByLabelText('Ulangi kata sandi'), confirmation);
-  await userEvent.click(screen.getByRole('button', { name: 'Daftar' }));
-}
-
-describe('RegisterPage', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('menolak nama/email tidak valid', async () => {
-    renderWithProviders(<RegisterPage />);
-    await fill({ name: 'Budi', email: 'salah', password: 'rahasia', confirmation: 'rahasia' });
-    expect(showWarningDialog).toHaveBeenCalledWith('Nama dan email yang valid wajib diisi.');
+describe("RegisterPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('menolak kata sandi pendek', async () => {
-    renderWithProviders(<RegisterPage />);
-    await fill({ name: 'Budi', email: 'a@b.co', password: '123', confirmation: '123' });
-    expect(showWarningDialog).toHaveBeenCalledWith('Kata sandi minimal 6 karakter.');
+  it("should render inputs and dispatch registration", () => {
+    const registerSpy = vi
+      .spyOn(authAction, "asyncSetIsAuthRegister")
+      .mockReturnValue(() => {});
+
+    renderWithProviders(<RegisterPage />, {
+      preloadedState: {
+        isAuthRegister: false,
+      },
+    });
+
+    const nameInput = screen.getByTestId("register-name-input");
+    const emailInput = screen.getByTestId("register-email-input");
+    const passwordInput = screen.getByTestId("register-password-input");
+    const submitBtn = screen.getByTestId("register-submit-button");
+
+    fireEvent.change(nameInput, { target: { value: "Delcom User" } });
+    fireEvent.change(emailInput, { target: { value: "user@delcom.org" } });
+    fireEvent.change(passwordInput, { target: { value: "password123" } });
+    fireEvent.click(submitBtn);
+
+    expect(registerSpy).toHaveBeenCalledWith(
+      "Delcom User",
+      "user@delcom.org",
+      "password123"
+    );
   });
 
-  it('menolak konfirmasi yang berbeda', async () => {
-    renderWithProviders(<RegisterPage />);
-    await fill({ name: 'Budi', email: 'a@b.co', password: 'rahasia', confirmation: 'beda-sekali' });
-    expect(showWarningDialog).toHaveBeenCalledWith('Konfirmasi kata sandi tidak sama.');
-    expect(registerUser).not.toHaveBeenCalled();
+  it("should reset form fields and navigate to /auth/login on isAuthRegister success", () => {
+    renderWithProviders(<RegisterPage />, {
+      preloadedState: {
+        isAuthRegister: true,
+      },
+    });
+
+    expect(screen.getByTestId("register-submit-button")).toBeInTheDocument();
+    expect(mockPush).toHaveBeenCalledWith("/auth/login");
   });
 
-  it('registrasi sukses menuju halaman login', async () => {
-    vi.mocked(registerUser).mockResolvedValue(ok(undefined, 'Berhasil melakukan pendaftaran'));
-    renderWithProviders(<RegisterPage />);
-    await fill({ name: 'Budi', email: 'a@b.co', password: 'rahasia', confirmation: 'rahasia' });
-    await waitFor(() => expect(routerMock.push).toHaveBeenCalledWith('/auth/login'));
-    expect(registerUser).toHaveBeenCalledWith('Budi', 'a@b.co', 'rahasia');
-    expect(screen.getByRole('link', { name: 'Masuk di sini' })).toHaveAttribute('href', '/auth/login');
-  });
+  it("should handle error state when isAuthRegister is false while loading", () => {
+    const { store } = renderWithProviders(<RegisterPage />, {
+      preloadedState: {
+        isAuthRegister: null,
+      },
+    });
 
-  it('registrasi gagal tetap di halaman', async () => {
-    vi.mocked(registerUser).mockResolvedValue(fail('Data tidak valid'));
-    renderWithProviders(<RegisterPage />);
-    await fill({ name: 'Budi', email: 'a@b.co', password: 'rahasia', confirmation: 'rahasia' });
-    await waitFor(() => expect(registerUser).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Daftar' })).toBeEnabled());
-    expect(routerMock.push).not.toHaveBeenCalled();
+    const submitBtn = screen.getByTestId("register-submit-button");
+    fireEvent.click(submitBtn);
+
+    // Simulate action failure wrapped in act
+    act(() => {
+      store.dispatch(authAction.setIsAuthRegisterActionCreator(false));
+    });
+    expect(screen.getByTestId("register-submit-button")).toBeEnabled();
   });
 });

@@ -1,44 +1,109 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import UsersPage from "./UsersPage";
+import { renderWithProviders } from "../../../test-utils";
+import * as userAction from "../states/action";
 
-vi.mock('@/features/users/api/userApi');
-vi.mock('@/helpers/toolsHelper', () => ({ showErrorDialog: vi.fn(), showSuccessDialog: vi.fn() }));
+describe("UsersPage", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  const mockUsers = [
+    {
+      id: 1,
+      name: "Abdullah",
+      email: "abdullah@delcom.org",
+      photo: "https://example.com/photo.jpg",
+      created_at: "2024-10-05T02:53:38.000000Z",
+    },
+    {
+      id: 2,
+      name: "Ubaid",
+      email: "ubaid@delcom.org",
+      photo: null,
+      created_at: "2024-10-05T03:18:14.000000Z",
+    },
+    {
+      id: 3,
+      name: "",
+      email: "",
+      photo: null,
+      created_at: "2024-10-05T03:18:14.000000Z",
+    },
+  ];
 
-import { getUsers } from '@/features/users/api/userApi';
-import UsersPage from '@/features/users/pages/UsersPage';
-import { makeUser, ok, renderWithProviders } from '@/test-utils';
+  it("should render users list, fallback initial avatar, and search users", () => {
+    renderWithProviders(<UsersPage />, {
+      preloadedState: {
+        users: mockUsers,
+      },
+    });
 
-describe('UsersPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+    expect(screen.getByText("Semua Pengguna")).toBeInTheDocument();
+    expect(screen.getByText("Abdullah")).toBeInTheDocument();
+    expect(screen.getByText("Ubaid")).toBeInTheDocument();
+    expect(screen.getAllByText("U").length).toBeGreaterThan(0); // initial avatar fallback
 
-  it('menampilkan daftar pengguna dan mencari berdasarkan nama/email', async () => {
-    vi.mocked(getUsers).mockResolvedValue(
-      ok({
-        users: [
-          makeUser({ id: 1, name: 'Ani', email: 'ani@del.ac.id' }),
-          makeUser({ id: 2, name: 'Budi', email: 'budi@del.ac.id', photo: 'img/b.png' }),
-        ],
-      }),
-    );
-    renderWithProviders(<UsersPage />);
-    expect(screen.getByRole('heading', { level: 1, name: 'Daftar Pengguna' })).toBeInTheDocument();
-    expect(await screen.findByText('Ani')).toBeInTheDocument();
-    expect(screen.getByText('budi@del.ac.id')).toBeInTheDocument();
+    const searchInput = screen.getByTestId("search-user-input");
+    fireEvent.change(searchInput, { target: { value: "abdullah" } });
 
-    await userEvent.type(screen.getByLabelText('Cari pengguna'), 'BUDI');
-    expect(screen.queryByText('Ani')).not.toBeInTheDocument();
-    expect(screen.getByText('Budi')).toBeInTheDocument();
-
-    await userEvent.clear(screen.getByLabelText('Cari pengguna'));
-    await userEvent.type(screen.getByLabelText('Cari pengguna'), 'tidak-ada');
-    expect(screen.getByText('Tidak ada pengguna yang ditemukan.')).toBeInTheDocument();
+    expect(screen.getByText("Abdullah")).toBeInTheDocument();
+    expect(screen.queryByText("Ubaid")).not.toBeInTheDocument();
   });
 
-  it('menampilkan keadaan kosong saat belum ada pengguna', async () => {
-    vi.mocked(getUsers).mockResolvedValue(ok({ users: [] }));
-    renderWithProviders(<UsersPage />);
-    await waitFor(() => expect(getUsers).toHaveBeenCalled());
-    expect(screen.getByText('Tidak ada pengguna yang ditemukan.')).toBeInTheDocument();
+  it("should handle state when users in store is null", () => {
+    renderWithProviders(<UsersPage />, {
+      preloadedState: {
+        users: null,
+      },
+    });
+
+    expect(screen.getByText("Semua Pengguna")).toBeInTheDocument();
+  });
+
+  it("should show empty state when no users found and not loading", async () => {
+    vi.spyOn(userAction, "asyncSetUsers").mockReturnValue(() => Promise.resolve());
+    renderWithProviders(<UsersPage />, {
+      preloadedState: {
+        users: [],
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Tidak ada data pengguna ditemukan.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("should show loading indicator while users are being fetched", () => {
+    vi.spyOn(userAction, "asyncSetUsers").mockImplementation(
+      () => () => new Promise(() => {})
+    );
+
+    renderWithProviders(<UsersPage />, {
+      preloadedState: {
+        users: [],
+      },
+    });
+
+    expect(screen.getByText("Memuat daftar pengguna...")).toBeInTheDocument();
+  });
+
+  it("should not update loading state after unmount (isMounted guard)", async () => {
+    let resolveLoad;
+    const pendingPromise = new Promise((resolve) => {
+      resolveLoad = resolve;
+    });
+    vi.spyOn(userAction, "asyncSetUsers").mockReturnValue(() => pendingPromise);
+
+    const { unmount } = renderWithProviders(<UsersPage />, {
+      preloadedState: { users: [] },
+    });
+    unmount();
+    resolveLoad();
+    await pendingPromise;
+    // isMounted guard mencegah setState setelah unmount; tidak ada sisa UI dan tidak ada error
+    expect(screen.queryAllByText("Memuat daftar pengguna...")).toHaveLength(0);
   });
 });

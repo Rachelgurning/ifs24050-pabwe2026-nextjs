@@ -1,38 +1,57 @@
-/**
- * Launcher server Next.js (TypeScript) yang membaca port secara dinamis
- * dari APP_PORT pada berkas .env (atau .env.example sebagai cadangan).
- *
- * Jalankan:  bun run serve                       (mode development)
- *            NODE_ENV=production bun src/server.ts   (setelah `bun run build`)
- */
-import { createServer } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import next from 'next';
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
-function loadEnvFile(file: string): void {
-  const path = resolve(process.cwd(), file);
-  if (!existsSync(path)) return;
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)\s*$/);
-    if (match && process.env[match[1]] === undefined) {
-      process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
-    }
+function readEnvValue(content: string, key: string): string | undefined {
+  for (const line of content.split("\n")) {
+    const separator = line.indexOf("=");
+    if (separator < 0) continue;
+    if (line.slice(0, separator).trim() !== key) continue;
+
+    const value = line.slice(separator + 1).trim();
+    if (value) return value;
   }
+
+  return undefined;
 }
 
-loadEnvFile('.env');
-loadEnvFile('.env.example');
+function getPort(): string {
+  if (process.env.APP_PORT) return process.env.APP_PORT.trim();
+  if (process.env.PORT) return process.env.PORT.trim();
 
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = '0.0.0.0';
-const port = Number(process.env.APP_PORT ?? 3000);
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, "utf-8");
+      return readEnvValue(content, "APP_PORT") ?? readEnvValue(content, "PORT") ?? "3000";
+    } catch {
+      // fallback jika file .env tidak dapat dibaca
+    }
+  }
 
-const app = next({ dev, hostname, port });
-const handle = app.getRequestHandler();
+  return "3000";
+}
 
-app.prepare().then(() => {
-  createServer((req, res) => handle(req, res)).listen(port, hostname, () => {
-    console.log(`> Ruang Post siap di http://localhost:${port} (${dev ? 'development' : 'production'})`);
-  });
+const action = process.argv[2] || "dev";
+const port = getPort();
+
+const nextArgs = action === "start" ? ["start", "-p", port] : ["dev", "--turbopack", "-p", port];
+
+const nextBin = require.resolve("next/dist/bin/next");
+
+const child = spawn(process.execPath, [nextBin, ...nextArgs], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    PORT: port,
+    APP_PORT: port,
+  },
+});
+
+child.on("exit", (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+  } else {
+    process.exit(code ?? 0);
+  }
 });

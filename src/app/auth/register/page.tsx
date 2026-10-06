@@ -1,11 +1,5 @@
-import type { Metadata } from 'next';
-import RegisterPage from '@/features/auth/pages/RegisterPage';
+"use client";
 
-export const metadata: Metadata = {
-  title: 'Daftar',
-  description: 'Buat akun Ruang Post baru dan mulai membagikan postingan Anda.',
-};
+import RegisterPage from "@/features/auth/pages/RegisterPage";
 
-export default function Page() {
-  return <RegisterPage />;
-}
+export default RegisterPage;

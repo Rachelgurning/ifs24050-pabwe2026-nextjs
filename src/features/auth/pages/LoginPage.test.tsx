@@ -1,62 +1,118 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent, act } from "@testing-library/react";
+import LoginPage from "./LoginPage";
+import { renderWithProviders } from "../../../test-utils";
+import * as authAction from "../states/action";
+import * as userAction from "../../users/states/action";
+import apiHelper from "../../../helpers/apiHelper";
 
-vi.mock('@/features/auth/api/authApi');
-vi.mock('@/helpers/toolsHelper', () => ({
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showWarningDialog: vi.fn(),
-}));
-
-import { getAccessToken } from '@/helpers/apiHelper';
-import { showWarningDialog } from '@/helpers/toolsHelper';
-import { loginUser } from '@/features/auth/api/authApi';
-import LoginPage from '@/features/auth/pages/LoginPage';
-import { routerMock } from '@/navigationMock';
-import { fail, makeUser, ok, renderWithProviders } from '@/test-utils';
-
-async function fillAndSubmit(email: string, password: string) {
-  if (email) await userEvent.type(document.querySelector('#login-email-input')!, email);
-  if (password) await userEvent.type(document.querySelector('#login-password-input')!, password);
-  await userEvent.click(document.querySelector('#login-submit-button')!);
-}
-
-describe('LoginPage', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('menyediakan elemen dengan selector wajib', () => {
-    renderWithProviders(<LoginPage />);
-    expect(document.querySelector('#login-email-input')).toBeInTheDocument();
-    expect(document.querySelector('#login-password-input')).toBeInTheDocument();
-    expect(document.querySelector('#login-submit-button')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Daftar akun baru' })).toHaveAttribute('href', '/auth/register');
+describe("LoginPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('memperingatkan bila email tidak valid atau sandi kosong', async () => {
-    renderWithProviders(<LoginPage />);
-    await fillAndSubmit('bukan-email', 'rahasia');
-    await fillAndSubmit('', '');
-    expect(showWarningDialog).toHaveBeenCalledTimes(2);
-    expect(loginUser).not.toHaveBeenCalled();
+  it("should render inputs and handle submit", async () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("sample-token");
+    const loginSpy = vi
+      .spyOn(authAction, "asyncSetIsAuthLogin")
+      .mockReturnValue(() => {});
+
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: false,
+        isProfile: false,
+      },
+    });
+
+    const emailInput = screen.getByTestId("login-email-input");
+    const passwordInput = screen.getByTestId("login-password-input");
+    const submitBtn = screen.getByTestId("login-submit-button");
+
+    fireEvent.change(emailInput, { target: { value: "testing@delcom.org" } });
+    fireEvent.change(passwordInput, { target: { value: "123456" } });
+    fireEvent.click(submitBtn);
+
+    expect(loginSpy).toHaveBeenCalledWith("testing@delcom.org", "123456");
   });
 
-  it('login sukses menyimpan token dan menuju dashboard', async () => {
-    vi.mocked(loginUser).mockResolvedValue(ok({ user: makeUser(), token: 'tok-9' }));
-    renderWithProviders(<LoginPage />);
-    await fillAndSubmit('a@b.co', 'rahasia');
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/'));
-    expect(getAccessToken()).toBe('tok-9');
-    expect(loginUser).toHaveBeenCalledWith('a@b.co', 'rahasia');
+  it("should reset loading when token is not present after submit", async () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue(null);
+    vi.spyOn(authAction, "asyncSetIsAuthLogin").mockImplementation(() => async () => {});
+
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: false,
+        isProfile: false,
+      },
+    });
+
+    const submitBtn = screen.getByTestId("login-submit-button");
+    await act(async () => {
+      fireEvent.submit(submitBtn.closest("form")!);
+    });
+
+    expect(submitBtn).toBeEnabled();
   });
 
-  it('login gagal tidak berpindah halaman', async () => {
-    vi.mocked(loginUser).mockResolvedValue(fail('Kredensial akun tidak ditemukan'));
-    renderWithProviders(<LoginPage />);
-    await fillAndSubmit('a@b.co', 'rahasia');
-    await waitFor(() => expect(loginUser).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Masuk' })).toBeEnabled());
-    expect(routerMock.replace).not.toHaveBeenCalled();
+  it("should handle login submit rejection", async () => {
+    const error = new Error("Login failed");
+    vi.spyOn(authAction, "asyncSetIsAuthLogin").mockReturnValue(() => {
+      throw error;
+    });
+
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: false,
+        isProfile: false,
+      },
+    });
+
+    const submitBtn = screen.getByTestId("login-submit-button");
+    fireEvent.submit(submitBtn.closest("form")!);
+
+    expect(submitBtn).toBeEnabled();
+  });
+
+  it("should trigger asyncSetProfile when login succeeds and token exists", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("test-token");
+    const setProfileSpy = vi
+      .spyOn(userAction, "asyncSetProfile")
+      .mockReturnValue(() => {});
+
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: true,
+        isProfile: false,
+      },
+    });
+
+    expect(setProfileSpy).toHaveBeenCalled();
+  });
+
+  it("should reset state when login fails or when isProfile finishes", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue(null);
+    const setLoginActionSpy = vi.spyOn(
+      authAction,
+      "setIsAuthLoginActionCreator"
+    );
+    const setIsProfileSpy = vi.spyOn(userAction, "setIsProfile");
+
+    // Case 1: isAuthLogin true but no token
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: true,
+        isProfile: false,
+      },
+    });
+    expect(setLoginActionSpy).toHaveBeenCalledWith(false);
+
+    // Case 2: isProfile true
+    renderWithProviders(<LoginPage />, {
+      preloadedState: {
+        isAuthLogin: false,
+        isProfile: true,
+      },
+    });
+    expect(setIsProfileSpy).toHaveBeenCalledWith(false);
   });
 });

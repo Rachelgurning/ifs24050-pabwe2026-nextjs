@@ -1,44 +1,135 @@
-import { apiFetch } from '@/helpers/apiHelper';
-import type { Post, PostDetail } from '@/types';
+import apiHelper from "../../../helpers/apiHelper";
+import { DELCOM_BASEURL } from "@/lib/config";
+import type { ApiResult, Post } from "@/types";
 
-export function getPosts(isMe: boolean) {
-  return apiFetch<{ posts: Post[] }>('/posts', { params: { is_me: isMe ? 1 : undefined } });
-}
+const postApi = (() => {
+  const BASE_URL = `${DELCOM_BASEURL}/posts`;
 
-export function getPost(postId: number) {
-  return apiFetch<{ post: PostDetail }>(`/posts/${postId}`, {});
-}
+  function _url(path: string) {
+    return BASE_URL + path;
+  }
 
-export function addPost(description: string) {
-  return apiFetch<{ post_id: number }>('/posts', { method: 'POST', body: { description } });
-}
+  async function _parse<T = unknown>(
+    response: Response,
+    fallbackMessage: string
+  ): Promise<ApiResult<T>> {
+    const result: ApiResult<T> = await response.json();
+    if (result.status !== "success") {
+      throw new Error(result.message || fallbackMessage);
+    }
+    return result;
+  }
 
-export function changePost(postId: number, description: string) {
-  return apiFetch(`/posts/${postId}`, { method: 'PUT', body: { description } });
-}
+  function _json(method: string, body?: Record<string, unknown>): RequestInit {
+    return {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    };
+  }
 
-export function changePostCover(postId: number, cover: File) {
-  const formData = new FormData();
-  formData.append('cover', cover);
-  return apiFetch(`/posts/${postId}/cover`, { method: 'POST', formData });
-}
+  async function postPost(description: string) {
+    const response = await apiHelper.fetchData(_url("/"), _json("POST", { description }));
+    const result = await _parse(response, "Gagal menambahkan postingan");
+    return result.data;
+  }
 
-export function deletePost(postId: number) {
-  return apiFetch(`/posts/${postId}`, { method: 'DELETE' });
-}
+  async function postPostCover(postId: number | string, cover: File) {
+    const formData = new FormData();
+    formData.append("cover", cover, cover.name || "cover.jpg");
+    const response = await apiHelper.fetchData(_url(`/${postId}/cover`), {
+      method: "POST",
+      body: formData,
+    });
+    const result = await _parse(response, "Gagal mengubah cover");
+    return result.message;
+  }
 
-export function likePost(postId: number, like: boolean) {
-  return apiFetch(`/posts/${postId}/likes`, { method: 'POST', body: { like: like ? 1 : 0 } });
-}
+  async function putPost(postId: number | string, description: string) {
+    const response = await apiHelper.fetchData(
+      _url(`/${postId}`),
+      _json("PUT", { description })
+    );
+    const result = await _parse(response, "Gagal mengubah postingan");
+    return result.message;
+  }
 
-export function addComment(postId: number, comment: string) {
-  return apiFetch(`/posts/${postId}/comments`, { method: 'POST', body: { comment } });
-}
+  async function getPosts(isMe = false): Promise<Post[]> {
+    const response = await apiHelper.fetchData(_url(isMe ? "/?is_me=1" : "/"), {
+      method: "GET",
+    });
+    const result = await _parse<{ posts: Post[] }>(
+      response,
+      "Gagal mengambil data postingan"
+    );
+    return result.data?.posts || [];
+  }
 
-export function deleteComment(postId: number) {
-  return apiFetch(`/posts/${postId}/comments`, { method: 'DELETE' });
-}
+  async function getPostById(postId: number | string): Promise<Post | undefined> {
+    const response = await apiHelper.fetchData(_url(`/${postId}`), {
+      method: "GET",
+    });
+    const result = await _parse<{ post: Post }>(
+      response,
+      "Gagal mengambil detail postingan"
+    );
+    return result.data?.post;
+  }
 
-export function deleteAllPosts() {
-  return apiFetch('/posts', { method: 'DELETE' });
-}
+  async function deletePost(postId: number | string) {
+    const response = await apiHelper.fetchData(_url(`/${postId}`), {
+      method: "DELETE",
+    });
+    const result = await _parse(response, "Gagal menghapus postingan");
+    return result.message;
+  }
+
+  async function postPostLike(postId: number | string, like: boolean) {
+    const response = await apiHelper.fetchData(
+      _url(`/${postId}/likes`),
+      _json("POST", { like: like ? 1 : 0 })
+    );
+    const result = await _parse(response, "Gagal mengubah status suka");
+    return result.message;
+  }
+
+  async function postPostComment(postId: number | string, comment: string) {
+    const response = await apiHelper.fetchData(
+      _url(`/${postId}/comments`),
+      _json("POST", { comment })
+    );
+    const result = await _parse(response, "Gagal menambahkan komentar");
+    return result.message;
+  }
+
+  async function deletePostComment(postId: number | string) {
+    const response = await apiHelper.fetchData(_url(`/${postId}/comments`), {
+      method: "DELETE",
+    });
+    const result = await _parse(response, "Gagal menghapus komentar");
+    return result.message;
+  }
+
+  async function deleteAllPosts() {
+    const response = await apiHelper.fetchData(_url("/"), {
+      method: "DELETE",
+    });
+    const result = await _parse(response, "Gagal menghapus semua postingan");
+    return result.message;
+  }
+
+  return {
+    postPost,
+    postPostCover,
+    putPost,
+    getPosts,
+    getPostById,
+    deletePost,
+    postPostLike,
+    postPostComment,
+    deletePostComment,
+    deleteAllPosts,
+  };
+})();
+
+export default postApi;

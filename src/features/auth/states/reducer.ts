@@ -1,11 +1,29 @@
-import { createFlagReducer } from '@/helpers/reducerHelper';
-import { AuthActionType } from '@/features/auth/states/action';
+import type { AppAction } from "@/types/action";
+import { ActionType } from "./action";
 
-/** true setelah login berhasil, false setelah logout. */
-export const isAuthLogin = createFlagReducer([AuthActionType.LOGIN], [AuthActionType.LOGOUT]);
+export const isAuthLoginReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_AUTH_LOGIN:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-/** true setelah registrasi berhasil. */
-export const isAuthRegister = createFlagReducer([AuthActionType.REGISTER], []);
+export const isAuthRegisterReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_AUTH_REGISTER:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-/** true setelah logout, false ketika login kembali. */
-export const isAuthLogout = createFlagReducer([AuthActionType.LOGOUT], [AuthActionType.LOGIN]);
+export const isAuthLogoutReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_AUTH_LOGOUT:
+      return action.payload;
+    default:
+      return state;
+  }
+};

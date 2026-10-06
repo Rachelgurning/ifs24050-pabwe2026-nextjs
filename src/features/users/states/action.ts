@@ -1,105 +1,144 @@
-import { callApi, runMutation } from '@/helpers/thunkHelper';
-import { showSuccessDialog } from '@/helpers/toolsHelper';
-import {
-  changeProfilePassword,
-  changeProfilePhoto,
-  getProfile,
-  getUsers,
-  updateProfile,
-} from '@/features/users/api/userApi';
-import type { AppDispatch } from '@/store';
-import type { User } from '@/types';
-import type { AppAction, MutationPhase } from '@/types/action';
+import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper";
+import userApi from "../api/userApi";
 
-export const UserActionType = {
-  RECEIVE_USERS: 'users/receiveUsers',
-  RECEIVE_USER: 'users/receiveUser',
-  RECEIVE_PROFILE: 'users/receiveProfile',
-} as const;
+export const ActionType = {
+  SET_USERS: "SET_USERS",
+  SET_USER: "SET_USER",
+  SET_PROFILE: "SET_PROFILE",
+  SET_IS_PROFILE: "SET_IS_PROFILE",
+  SET_IS_CHANGE_PROFILE: "SET_IS_CHANGE_PROFILE",
+  SET_IS_CHANGE_PROFILE_PHOTO: "SET_IS_CHANGE_PROFILE_PHOTO",
+  SET_IS_CHANGE_PROFILE_PASSWORD: "SET_IS_CHANGE_PROFILE_PASSWORD",
+};
 
-export type ProfileMutation = 'change' | 'changePhoto' | 'changePassword';
-
-export const profileMutationType = (name: ProfileMutation, phase: MutationPhase) =>
-  `users/${name}/${phase}`;
-
-export const receiveUsersActionCreator = (users: User[]): AppAction<User[]> => ({
-  type: UserActionType.RECEIVE_USERS,
-  payload: users,
-});
-
-export const receiveUserActionCreator = (user: User): AppAction<User> => ({
-  type: UserActionType.RECEIVE_USER,
-  payload: user,
-});
-
-export const receiveProfileActionCreator = (profile: User): AppAction<User> => ({
-  type: UserActionType.RECEIVE_PROFILE,
-  payload: profile,
-});
-
-export const profileMutationActionCreator = (
-  name: ProfileMutation,
-  phase: MutationPhase,
-): AppAction => ({ type: profileMutationType(name, phase) });
-
-export function asyncReceiveUsers() {
-  return async (dispatch: AppDispatch): Promise<void> => {
-    const result = await callApi(() => getUsers(), false);
-    if (result) dispatch(receiveUsersActionCreator(result.data!.users));
+// Get all users
+export function setUsersActionCreator(users) {
+  return {
+    type: ActionType.SET_USERS,
+    payload: users,
   };
 }
 
-/** Memuat profil pengguna aktif. `silent` = tanpa dialog galat (dipakai route guard). */
-export function asyncReceiveProfile(silent: boolean) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await callApi(() => getProfile(), silent);
-    if (!result) return false;
-    dispatch(receiveProfileActionCreator(result.data!.user));
-    return true;
+export function asyncSetUsers() {
+  return async (dispatch) => {
+    try {
+      const users = await userApi.getUsers();
+      dispatch(setUsersActionCreator(users));
+    } catch (error) {
+      dispatch(setUsersActionCreator([]));
+    }
   };
 }
 
-export function asyncChangeProfile(name: string, email: string) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => profileMutationActionCreator('change', phase),
-      () => updateProfile(name, email),
-    );
-    if (!result) return false;
-    dispatch(receiveProfileActionCreator(result.data!.user));
-    await showSuccessDialog(result.message);
-    return true;
+// Get user by ID
+export function setUserActionCreator(user) {
+  return {
+    type: ActionType.SET_USER,
+    payload: user,
   };
 }
 
-export function asyncChangeProfilePhoto(photo: File) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => profileMutationActionCreator('changePhoto', phase),
-      () => changeProfilePhoto(photo),
-    );
-    if (!result) return false;
-    await dispatch(asyncReceiveProfile(true));
-    await showSuccessDialog(result.message);
-    return true;
+export function asyncSetUserById(userId) {
+  return async (dispatch) => {
+    try {
+      const user = await userApi.getUserById(userId);
+      dispatch(setUserActionCreator(user));
+    } catch (error) {
+      dispatch(setUserActionCreator(null));
+    }
   };
 }
 
-export function asyncChangeProfilePassword(
-  password: string,
-  newPassword: string,
-  newPasswordConfirmation: string,
-) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await runMutation(
-      dispatch,
-      (phase) => profileMutationActionCreator('changePassword', phase),
-      () => changeProfilePassword(password, newPassword, newPasswordConfirmation),
-    );
-    if (!result) return false;
-    await showSuccessDialog(result.message);
-    return true;
+// Get user profile
+export function setProfileActionCreator(profile) {
+  return {
+    type: ActionType.SET_PROFILE,
+    payload: profile,
+  };
+}
+
+export function setIsProfile(isProfile) {
+  return {
+    type: ActionType.SET_IS_PROFILE,
+    payload: isProfile,
+  };
+}
+
+export function asyncSetProfile() {
+  return async (dispatch) => {
+    try {
+      const profile = await userApi.getProfile();
+      dispatch(setProfileActionCreator(profile));
+    } catch (error) {
+      dispatch(setProfileActionCreator(null));
+    } finally {
+      dispatch(setIsProfile(true));
+    }
+  };
+}
+
+// Put profile
+export function setIsChangeProfileActionCreator(isChange) {
+  return {
+    type: ActionType.SET_IS_CHANGE_PROFILE,
+    payload: isChange,
+  };
+}
+
+export function asyncPutProfile(name, email) {
+  return async (dispatch) => {
+    try {
+      const profile = await userApi.putProfile(name, email);
+      dispatch(setProfileActionCreator(profile));
+      showSuccessDialog("Profil berhasil diperbarui!");
+      dispatch(setIsChangeProfileActionCreator(true));
+    } catch (error) {
+      showErrorDialog(error.message);
+      dispatch(setIsChangeProfileActionCreator(false));
+    }
+  };
+}
+
+// Post profile photo
+export function setIsChangeProfilePhotoActionCreator(isChange) {
+  return {
+    type: ActionType.SET_IS_CHANGE_PROFILE_PHOTO,
+    payload: isChange,
+  };
+}
+
+export function asyncPostProfilePhoto(photo) {
+  return async (dispatch) => {
+    try {
+      const message = await userApi.postProfilePhoto(photo);
+      showSuccessDialog(message || "Foto profil berhasil diperbarui!");
+      const profile = await userApi.getProfile();
+      dispatch(setProfileActionCreator(profile));
+      dispatch(setIsChangeProfilePhotoActionCreator(true));
+    } catch (error) {
+      showErrorDialog(error.message);
+      dispatch(setIsChangeProfilePhotoActionCreator(false));
+    }
+  };
+}
+
+// Put profile password
+export function setIsChangeProfilePasswordActionCreator(isChange) {
+  return {
+    type: ActionType.SET_IS_CHANGE_PROFILE_PASSWORD,
+    payload: isChange,
+  };
+}
+
+export function asyncPutProfilePassword(oldPassword, newPassword, newPasswordConfirmation) {
+  return async (dispatch) => {
+    try {
+      const message = await userApi.putProfilePassword(oldPassword, newPassword, newPasswordConfirmation);
+      showSuccessDialog(message || "Kata sandi berhasil diperbarui!");
+      dispatch(setIsChangeProfilePasswordActionCreator(true));
+    } catch (error) {
+      showErrorDialog(error.message);
+      dispatch(setIsChangeProfilePasswordActionCreator(false));
+    }
   };
 }

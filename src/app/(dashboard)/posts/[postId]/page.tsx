@@ -1,11 +1,5 @@
-import type { Metadata } from 'next';
-import DetailPage from '@/features/posts/pages/DetailPage';
+"use client";
 
-export const metadata: Metadata = {
-  title: 'Detail Postingan',
-  description: 'Baca detail postingan, beri suka, dan tulis komentar.',
-};
+import DetailPage from "@/features/posts/pages/DetailPage";
 
-export default function Page() {
-  return <DetailPage />;
-}
+export default DetailPage;

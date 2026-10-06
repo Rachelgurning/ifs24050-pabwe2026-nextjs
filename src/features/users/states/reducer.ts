@@ -1,37 +1,65 @@
-import { AuthActionType } from '@/features/auth/states/action';
-import { createFlagReducer, createValueReducer } from '@/helpers/reducerHelper';
-import {
-  UserActionType,
-  profileMutationType,
-  type ProfileMutation,
-} from '@/features/users/states/action';
-import type { User } from '@/types';
+import type { AppAction } from "@/types/action";
+import { ActionType } from "./action";
 
-export const users = createValueReducer<User[]>([], UserActionType.RECEIVE_USERS, [
-  AuthActionType.LOGOUT,
-]);
+export const usersReducer = (state = [], action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_USERS:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-export const user = createValueReducer<User | null>(null, UserActionType.RECEIVE_USER, [
-  AuthActionType.LOGOUT,
-]);
+export const userReducer = (state = null, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_USER:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-export const profile = createValueReducer<User | null>(null, UserActionType.RECEIVE_PROFILE, [
-  AuthActionType.LOGOUT,
-]);
+export const profileReducer = (state = null, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_PROFILE:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-/** true setelah profil pengguna aktif berhasil dimuat (dipakai route guard). */
-export const isProfile = createFlagReducer(
-  [UserActionType.RECEIVE_PROFILE],
-  [AuthActionType.LOGOUT],
-);
+export const isProfileReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_PROFILE:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-/** Flag "sedang memproses" untuk tiap aksi ubah profil. */
-const loading = (name: ProfileMutation) =>
-  createFlagReducer(
-    [profileMutationType(name, 'request')],
-    [profileMutationType(name, 'success'), profileMutationType(name, 'failure')],
-  );
+export const isChangeProfileReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_CHANGE_PROFILE:
+      return action.payload;
+    default:
+      return state;
+  }
+};
 
-export const isChangeProfile = loading('change');
-export const isChangeProfilePhoto = loading('changePhoto');
-export const isChangeProfilePassword = loading('changePassword');
+export const isChangeProfilePhotoReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_CHANGE_PROFILE_PHOTO:
+      return action.payload;
+    default:
+      return state;
+  }
+};
+
+export const isChangeProfilePasswordReducer = (state = false, action: AppAction = {}) => {
+  switch (action.type) {
+    case ActionType.SET_IS_CHANGE_PROFILE_PASSWORD:
+      return action.payload;
+    default:
+      return state;
+  }
+};

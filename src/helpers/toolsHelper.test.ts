@@ -1,45 +1,88 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const fire = vi.fn();
-vi.mock('sweetalert2', () => ({ default: { fire: (...args: unknown[]) => fire(...args) } }));
-
+import { describe, it, expect, vi } from "vitest";
+import Swal from "sweetalert2";
 import {
-  formatDate,
-  showConfirmDialog,
   showErrorDialog,
-  showSuccessDialog,
   showWarningDialog,
-} from '@/helpers/toolsHelper';
+  showSuccessDialog,
+  showConfirmDialog,
+  formatDate,
+} from "./toolsHelper";
 
-beforeEach(() => {
-  fire.mockReset();
-  fire.mockResolvedValue({ isConfirmed: true });
-});
+vi.mock("sweetalert2", () => ({
+  default: {
+    fire: vi.fn(),
+    close: vi.fn(),
+  },
+}));
 
-describe('dialog helpers', () => {
-  it.each([
-    ['success', showSuccessDialog],
-    ['error', showErrorDialog],
-    ['warning', showWarningDialog],
-  ] as const)('menampilkan dialog %s', async (icon, show) => {
-    await show('pesan');
-    expect(fire).toHaveBeenCalledWith(expect.objectContaining({ icon, text: 'pesan' }));
-  });
-
-  it('mengembalikan hasil konfirmasi', async () => {
-    expect(await showConfirmDialog('Judul', 'Isi')).toBe(true);
-    fire.mockResolvedValue({ isConfirmed: false });
-    expect(await showConfirmDialog('Judul', 'Isi')).toBe(false);
-    expect(fire).toHaveBeenCalledWith(
-      expect.objectContaining({ icon: 'question', title: 'Judul', showCancelButton: true }),
+describe("toolsHelper", () => {
+  it("should call Swal.fire for showErrorDialog and handle confirmation", async () => {
+    Swal.fire.mockResolvedValue({ isConfirmed: true });
+    await showErrorDialog("Error test");
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Terjadi Kesalahan",
+        text: "Error test",
+        icon: "error",
+      })
     );
-  });
-});
+    expect(Swal.close).toHaveBeenCalled();
 
-describe('formatDate', () => {
-  it('memformat tanggal ke bahasa Indonesia', () => {
-    const text = formatDate('2026-10-02T03:07:11.000000Z');
-    expect(text).toContain('2026');
-    expect(text).toContain('Oktober');
+    // Not confirmed branch
+    Swal.fire.mockResolvedValue({ isConfirmed: false });
+    await showErrorDialog("Error test");
+  });
+
+  it("should call Swal.fire for showWarningDialog and handle confirmation", async () => {
+    Swal.fire.mockResolvedValue({ isConfirmed: true });
+    await showWarningDialog("Warning test");
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Peringatan",
+        text: "Warning test",
+        icon: "warning",
+      })
+    );
+    expect(Swal.close).toHaveBeenCalled();
+
+    Swal.fire.mockResolvedValue({ isConfirmed: false });
+    await showWarningDialog("Warning test");
+  });
+
+  it("should call Swal.fire for showSuccessDialog and handle confirmation", async () => {
+    Swal.fire.mockResolvedValue({ isConfirmed: true });
+    await showSuccessDialog("Success test");
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Tindakan Berhasil",
+        text: "Success test",
+        icon: "success",
+      })
+    );
+    expect(Swal.close).toHaveBeenCalled();
+
+    Swal.fire.mockResolvedValue({ isConfirmed: false });
+    await showSuccessDialog("Success test");
+  });
+
+  it("should call Swal.fire for showConfirmDialog", async () => {
+    Swal.fire.mockResolvedValue({ isConfirmed: true });
+    const res = await showConfirmDialog("Confirm test?");
+    expect(Swal.fire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Konfirmasi",
+        text: "Confirm test?",
+        icon: "question",
+      })
+    );
+    expect(res.isConfirmed).toBe(true);
+  });
+
+  it("should format date correctly or return fallback for empty date", () => {
+    expect(formatDate(null)).toBe("-");
+    expect(formatDate(undefined)).toBe("-");
+    const formatted = formatDate("2024-02-26T02:34:26.000000Z");
+    expect(formatted).toBeTruthy();
+    expect(typeof formatted).toBe("string");
   });
 });

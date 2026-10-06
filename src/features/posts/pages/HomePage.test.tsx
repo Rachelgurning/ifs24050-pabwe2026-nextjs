@@ -1,132 +1,169 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent, waitFor, act } from "@testing-library/react";
+import HomePage from "./HomePage";
+import { renderWithProviders } from "../../../test-utils";
+import * as toolsHelper from "../../../helpers/toolsHelper";
+import * as postAction from "../states/action";
 
-vi.mock('@/features/posts/api/postApi');
-vi.mock('@/helpers/toolsHelper', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/helpers/toolsHelper')>()),
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showWarningDialog: vi.fn(),
-  showConfirmDialog: vi.fn(),
+const nav = vi.hoisted(() => ({ tab: null as string | null }));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(nav.tab ? { tab: nav.tab } : {}),
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/",
+  useParams: () => ({}),
 }));
 
-import { showConfirmDialog } from '@/helpers/toolsHelper';
-import * as api from '@/features/posts/api/postApi';
-import HomePage from '@/features/posts/pages/HomePage';
-import { navState, routerMock } from '@/navigationMock';
-import { fail, makePost, makeUser, ok, renderWithProviders } from '@/test-utils';
+const profile = { id: 1, name: "Eliza", email: "e@del.org" };
 
 const posts = [
-  makePost({ id: 1, description: 'Belajar React', author: { name: 'Ani', photo: null }, likes: [1], comments: [3] }),
-  makePost({ id: 2, description: 'Makan siang', author: { name: 'Budi', photo: null }, cover: null }),
+  {
+    id: 1,
+    user_id: 1,
+    description: "Belajar Next.js itu seru",
+    cover: "https://img.test/cover.png",
+    created_at: "2026-10-01T10:00:00.000000Z",
+    updated_at: "2026-10-01T10:00:00.000000Z",
+    author: { name: "Eliza", photo: "https://img.test/eliza.png" },
+    likes: [1, 2],
+    comments: [{ id: 1, comment: "Mantap" }],
+  },
+  {
+    id: 2,
+    user_id: 2,
+    description: "Redux Toolkit memudahkan state",
+    cover: null,
+    created_at: "2026-10-02T10:00:00.000000Z",
+    updated_at: "2026-10-02T10:00:00.000000Z",
+    author: { name: "budi", photo: null },
+    likes: [],
+    comments: [],
+  },
 ];
 
-const renderHome = (withProfile = true) =>
-  renderWithProviders(<HomePage />, withProfile ? { profile: makeUser({ id: 1 }) } : undefined);
+describe("HomePage", () => {
+  let listSpy: ReturnType<typeof vi.spyOn>;
 
-describe('HomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.getPosts).mockResolvedValue(ok({ posts }));
+    nav.tab = null;
+    listSpy = vi
+      .spyOn(postAction, "asyncSetPosts")
+      .mockReturnValue((() => Promise.resolve()) as never);
   });
 
-  it('memuat dan menampilkan kartu postingan publik', async () => {
-    renderHome();
-    expect(screen.getByRole('status')).toHaveTextContent('Memuat postingan...');
-    expect(await screen.findByText('Belajar React')).toBeInTheDocument();
-    expect(api.getPosts).toHaveBeenCalledWith(false);
-    expect(screen.getByRole('heading', { level: 1, name: 'Semua Postingan' })).toBeInTheDocument();
-    expect(screen.getByText('Tanpa cover')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /1 suka/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('link', { name: 'Lihat detail postingan Ani' })).toHaveAttribute('href', '/posts/1');
-    expect(screen.queryByText('Hapus semua postingan saya')).not.toBeInTheDocument();
+  function renderPage(preloadedState: object = {}) {
+    return renderWithProviders(<HomePage />, {
+      preloadedState: { profile, posts, ...preloadedState },
+    });
+  }
+
+  it("should render nothing without profile", () => {
+    const { container } = renderWithProviders(<HomePage />, { preloadedState: { profile: null } });
+    expect(container.firstChild).toBeNull();
   });
 
-  it('live search memfilter dan menampilkan keadaan tanpa hasil', async () => {
-    renderHome();
-    await screen.findByText('Belajar React');
-    await userEvent.type(screen.getByLabelText('Cari postingan'), 'budi');
-    expect(screen.queryByText('Belajar React')).not.toBeInTheDocument();
-    expect(screen.getByText('Makan siang')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Cari postingan'), 'xyz');
-    expect(screen.getByText('Tidak ada postingan yang cocok dengan pencarian Anda.')).toBeInTheDocument();
+  it("should load all posts by default and my posts for tab=me", () => {
+    renderPage();
+    expect(listSpy).toHaveBeenCalledWith(false);
+    nav.tab = "me";
+    renderPage();
+    expect(listSpy).toHaveBeenLastCalledWith(true);
   });
 
-  it('keadaan kosong tanpa postingan, juga tanpa profil', async () => {
-    vi.mocked(api.getPosts).mockResolvedValue(ok({ posts: [] }));
-    renderHome(false);
-    expect(await screen.findByText(/Belum ada postingan di sini/)).toBeInTheDocument();
+  it("should render post cards", () => {
+    renderPage();
+    expect(screen.getByTestId("post-card-1")).toHaveTextContent("Belajar Next.js itu seru");
+    expect(screen.getByTestId("post-likes-1")).toHaveTextContent("2 suka");
+    expect(screen.getByTestId("post-comments-1")).toHaveTextContent("1 komentar");
+    expect(screen.getByAltText("Cover postingan Eliza")).toBeInTheDocument();
+    expect(screen.getByAltText("Eliza")).toBeInTheDocument();
+    expect(screen.getByTestId("post-card-2")).toHaveTextContent("B");
+    expect(screen.getByTestId("view-post-2")).toHaveAttribute("href", "/posts/2");
   });
 
-  it('tanpa profil, tidak ada postingan yang ditandai disukai', async () => {
-    renderHome(false);
-    await screen.findByText('Belajar React');
-    expect(screen.getAllByRole('button', { name: /suka/ }).every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
+  it("should show tabs with correct active state", () => {
+    renderPage();
+    expect(screen.getByTestId("tab-all")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("tab-me")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("tab-me")).toHaveAttribute("href", "/?tab=me");
+    expect(screen.queryByTestId("delete-all-posts-btn")).not.toBeInTheDocument();
   });
 
-  it('filter postingan saya memakai is_me dan menampilkan aksi hapus semua', async () => {
-    navState.search = 'filter=me';
-    renderHome();
-    expect(await screen.findByRole('heading', { level: 1, name: 'Postingan Saya' })).toBeInTheDocument();
-    expect(api.getPosts).toHaveBeenCalledWith(true);
-    expect(screen.getByRole('link', { name: 'Milik saya' })).toHaveAttribute('aria-current', 'page');
-    expect(await screen.findByText('Hapus semua postingan saya')).toBeInTheDocument();
+  it("should show delete-all only on my posts tab", () => {
+    nav.tab = "me";
+    renderPage();
+    expect(screen.getByTestId("tab-me")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("delete-all-posts-btn")).toBeInTheDocument();
   });
 
-  it('memberi suka lalu menyegarkan daftar; membatalkan suka bila sudah suka', async () => {
-    vi.mocked(api.likePost).mockResolvedValue(ok());
-    renderHome();
-    await screen.findByText('Belajar React');
-    await userEvent.click(screen.getByRole('button', { name: /0 suka/ }));
-    await waitFor(() => expect(api.likePost).toHaveBeenCalledWith(2, true));
-    await userEvent.click(screen.getByRole('button', { name: /1 suka/ }));
-    await waitFor(() => expect(api.likePost).toHaveBeenCalledWith(1, false));
-    expect(vi.mocked(api.getPosts).mock.calls.length).toBeGreaterThanOrEqual(3);
+  it("should show empty state", async () => {
+    renderPage({ posts: [] });
+    await waitFor(() =>
+      expect(screen.getByText("Belum ada postingan yang cocok.")).toBeInTheDocument()
+    );
   });
 
-  it('menghapus semua postingan setelah konfirmasi', async () => {
-    navState.search = 'filter=me';
-    vi.mocked(showConfirmDialog).mockResolvedValue(true);
-    vi.mocked(api.deleteAllPosts).mockResolvedValue(ok());
-    renderHome();
-    await userEvent.click(await screen.findByText('Hapus semua postingan saya'));
-    await waitFor(() => expect(api.deleteAllPosts).toHaveBeenCalled());
-    await waitFor(() => expect(vi.mocked(api.getPosts).mock.calls.length).toBeGreaterThanOrEqual(2));
+  it("should show loading state", () => {
+    listSpy.mockReturnValue((() => new Promise(() => {})) as never);
+    renderPage({ posts: [] });
+    expect(screen.getByText("Memuat postingan...")).toBeInTheDocument();
   });
 
-  it('hapus semua dibatalkan atau gagal tidak memuat ulang', async () => {
-    navState.search = 'filter=me';
-    renderHome();
-    const button = await screen.findByText('Hapus semua postingan saya');
+  it("should filter by description and author name", async () => {
+    renderPage();
+    await act(async () => {});
+    const input = screen.getByTestId("search-post-input");
 
-    vi.mocked(showConfirmDialog).mockResolvedValue(false);
-    await userEvent.click(button);
-    await waitFor(() => expect(showConfirmDialog).toHaveBeenCalledTimes(1));
-    expect(api.deleteAllPosts).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "redux" } });
+    expect(screen.queryByTestId("post-card-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("post-card-2")).toBeInTheDocument();
 
-    vi.mocked(showConfirmDialog).mockResolvedValue(true);
-    vi.mocked(api.deleteAllPosts).mockResolvedValue(fail());
-    const callsBefore = vi.mocked(api.getPosts).mock.calls.length;
-    await userEvent.click(button);
-    await waitFor(() => expect(api.deleteAllPosts).toHaveBeenCalled());
-    expect(vi.mocked(api.getPosts).mock.calls.length).toBe(callsBefore);
+    fireEvent.change(input, { target: { value: "ELIZA" } });
+    expect(screen.getByTestId("post-card-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("post-card-2")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "zzz" } });
+    expect(screen.getByText("Belum ada postingan yang cocok.")).toBeInTheDocument();
   });
 
-  it('tambah postingan: buka modal, tutup, lalu berhasil menuju detail', async () => {
-    vi.mocked(api.addPost).mockResolvedValue(ok({ post_id: 55 }, 'Berhasil menambahkan data'));
-    renderHome();
-    await screen.findByText('Belajar React');
+  it("should open and close the add modal", () => {
+    renderPage();
+    fireEvent.click(screen.getByTestId("add-post-btn"));
+    expect(screen.getByTestId("add-post-modal")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("close-add-modal-btn"));
+    expect(screen.queryByTestId("add-post-modal")).not.toBeInTheDocument();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Tambah Postingan' }));
-    expect(screen.getByRole('dialog', { name: 'Tambah Postingan' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  it("should reload posts after a post was published", () => {
+    renderPage({ isPostAdd: true, isPostAdded: true });
+    expect(listSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Tambah Postingan' }));
-    await userEvent.type(screen.getByLabelText('Deskripsi'), 'Postingan baru');
-    await userEvent.click(screen.getByRole('button', { name: 'Publikasikan' }));
-    await waitFor(() => expect(routerMock.push).toHaveBeenCalledWith('/posts/55'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  it("should delete all my posts when confirmed", async () => {
+    nav.tab = "me";
+    const deleteSpy = vi.spyOn(postAction, "asyncSetIsPostDeleteAll").mockReturnValue((() => {}) as never);
+    vi.spyOn(toolsHelper, "showConfirmDialog").mockResolvedValue({ isConfirmed: true } as never);
+    renderPage();
+    fireEvent.click(screen.getByTestId("delete-all-posts-btn"));
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalled());
+  });
+
+  it("should not delete all when cancelled", async () => {
+    nav.tab = "me";
+    const deleteSpy = vi.spyOn(postAction, "asyncSetIsPostDeleteAll").mockReturnValue((() => {}) as never);
+    const confirmSpy = vi.spyOn(toolsHelper, "showConfirmDialog").mockResolvedValue({ isConfirmed: false } as never);
+    renderPage();
+    fireEvent.click(screen.getByTestId("delete-all-posts-btn"));
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    await act(async () => {});
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it("should reload and reset flags after delete all finished", async () => {
+    const { store } = renderPage({ isPostDeletedAll: true, isPostDeleteAll: true });
+    await waitFor(() => expect(store.getState().isPostDeletedAll).toBe(false));
+    expect(store.getState().isPostDeleteAll).toBe(false);
+    expect(listSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

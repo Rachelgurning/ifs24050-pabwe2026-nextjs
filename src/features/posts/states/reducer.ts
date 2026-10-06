@@ -1,49 +1,56 @@
-import { AuthActionType } from '@/features/auth/states/action';
-import { createFlagReducer, createValueReducer } from '@/helpers/reducerHelper';
-import {
-  PostActionType,
-  postMutationType,
-  type PostMutation,
-} from '@/features/posts/states/action';
-import type { Post, PostDetail } from '@/types';
+import type { AppAction } from "@/types/action";
+import type { Post } from "@/types";
+import { ActionType } from "./action";
 
-export const posts = createValueReducer<Post[]>([], PostActionType.RECEIVE_POSTS, [
-  AuthActionType.LOGOUT,
-]);
+function createReducer<T>(type: string, defaultState: T) {
+  return function reducer(state: T = defaultState, action: AppAction = {}): T {
+    if (action.type === type) {
+      return action.payload;
+    }
+    return state;
+  };
+}
 
-export const post = createValueReducer<PostDetail | null>(null, PostActionType.RECEIVE_POST, [
-  AuthActionType.LOGOUT,
-  PostActionType.CLEAR_POST,
-]);
-
-/** Flag "sedang berjalan" untuk sebuah aksi. */
-const loading = (name: PostMutation) =>
-  createFlagReducer(
-    [postMutationType(name, 'request')],
-    [postMutationType(name, 'success'), postMutationType(name, 'failure')],
-  );
-
-/** Flag "sudah berhasil" untuk sebuah aksi. */
-const done = (name: PostMutation) =>
-  createFlagReducer(
-    [postMutationType(name, 'success')],
-    [postMutationType(name, 'request'), postMutationType(name, 'failure'), postMutationType(name, 'reset')],
-  );
-
-export const isPost = loading('fetch');
-export const isPostAdd = loading('add');
-export const isPostAdded = done('add');
-export const isPostChange = loading('change');
-export const isPostChanged = done('change');
-export const isPostChangeCover = loading('changeCover');
-export const isPostChangedCover = done('changeCover');
-export const isPostDelete = loading('delete');
-export const isPostDeleted = done('delete');
-export const isPostLike = loading('like');
-export const isPostLiked = done('like');
-export const isPostAddComment = loading('addComment');
-export const isPostAddedComment = done('addComment');
-export const isPostDeleteComment = loading('deleteComment');
-export const isPostDeletedComment = done('deleteComment');
-export const isPostDeleteAll = loading('deleteAll');
-export const isPostDeletedAll = done('deleteAll');
+export const postsReducer = createReducer<Post[]>(ActionType.SET_POSTS, []);
+export const postReducer = createReducer<Post | null>(ActionType.SET_POST, null);
+export const isPostReducer = createReducer(ActionType.SET_IS_POST, false);
+export const isPostAddReducer = createReducer(ActionType.SET_IS_POST_ADD, false);
+export const isPostAddedReducer = createReducer(ActionType.SET_IS_POST_ADDED, false);
+export const isPostChangeReducer = createReducer(ActionType.SET_IS_POST_CHANGE, false);
+export const isPostChangedReducer = createReducer(ActionType.SET_IS_POST_CHANGED, false);
+export const isPostChangeCoverReducer = createReducer(
+  ActionType.SET_IS_POST_CHANGE_COVER,
+  false
+);
+export const isPostChangedCoverReducer = createReducer(
+  ActionType.SET_IS_POST_CHANGED_COVER,
+  false
+);
+export const isPostDeleteReducer = createReducer(ActionType.SET_IS_POST_DELETE, false);
+export const isPostDeletedReducer = createReducer(ActionType.SET_IS_POST_DELETED, false);
+export const isPostLikeReducer = createReducer(ActionType.SET_IS_POST_LIKE, false);
+export const isPostLikedReducer = createReducer(ActionType.SET_IS_POST_LIKED, false);
+export const isPostAddCommentReducer = createReducer(
+  ActionType.SET_IS_POST_ADD_COMMENT,
+  false
+);
+export const isPostAddedCommentReducer = createReducer(
+  ActionType.SET_IS_POST_ADDED_COMMENT,
+  false
+);
+export const isPostDeleteCommentReducer = createReducer(
+  ActionType.SET_IS_POST_DELETE_COMMENT,
+  false
+);
+export const isPostDeletedCommentReducer = createReducer(
+  ActionType.SET_IS_POST_DELETED_COMMENT,
+  false
+);
+export const isPostDeleteAllReducer = createReducer(
+  ActionType.SET_IS_POST_DELETE_ALL,
+  false
+);
+export const isPostDeletedAllReducer = createReducer(
+  ActionType.SET_IS_POST_DELETED_ALL,
+  false
+);

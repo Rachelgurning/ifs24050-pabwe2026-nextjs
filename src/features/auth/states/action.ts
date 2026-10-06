@@ -1,46 +1,75 @@
-import { putAccessToken, removeAccessToken } from '@/helpers/apiHelper';
-import { callApi } from '@/helpers/thunkHelper';
-import { showSuccessDialog } from '@/helpers/toolsHelper';
-import { receiveUserActionCreator } from '@/features/users/states/action';
-import { loginUser, logoutUser, registerUser } from '@/features/auth/api/authApi';
-import type { AppDispatch } from '@/store';
-import type { AppAction } from '@/types/action';
+import apiHelper from "../../../helpers/apiHelper";
+import {
+  showErrorDialog,
+  showSuccessDialog,
+} from "../../../helpers/toolsHelper";
+import authApi from "../api/authApi";
 
-export const AuthActionType = {
-  LOGIN: 'auth/login',
-  REGISTER: 'auth/register',
-  LOGOUT: 'auth/logout',
-} as const;
+export const ActionType = {
+  SET_IS_AUTH_LOGIN: "SET_IS_AUTH_LOGIN",
+  SET_IS_AUTH_REGISTER: "SET_IS_AUTH_REGISTER",
+  SET_IS_AUTH_LOGOUT: "SET_IS_AUTH_LOGOUT",
+};
 
-export const loginActionCreator = (): AppAction => ({ type: AuthActionType.LOGIN });
-export const registerActionCreator = (): AppAction => ({ type: AuthActionType.REGISTER });
-export const logoutActionCreator = (): AppAction => ({ type: AuthActionType.LOGOUT });
-
-export function asyncLogin(email: string, password: string) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await callApi(() => loginUser(email, password), false);
-    if (!result) return false;
-    putAccessToken(result.data!.token);
-    dispatch(receiveUserActionCreator(result.data!.user));
-    dispatch(loginActionCreator());
-    return true;
+// Login
+export function setIsAuthLoginActionCreator(isAuthLogin) {
+  return {
+    type: ActionType.SET_IS_AUTH_LOGIN,
+    payload: isAuthLogin,
   };
 }
 
-export function asyncRegister(name: string, email: string, password: string) {
-  return async (dispatch: AppDispatch): Promise<boolean> => {
-    const result = await callApi(() => registerUser(name, email, password), false);
-    if (!result) return false;
-    dispatch(registerActionCreator());
-    await showSuccessDialog(result.message);
-    return true;
+export function asyncSetIsAuthLogin(email, password) {
+  return async (dispatch) => {
+    try {
+      const data = await authApi.postLogin(email, password);
+      apiHelper.putAccessToken(data.token);
+      dispatch(setIsAuthLoginActionCreator(true));
+    } catch (error) {
+      dispatch(setIsAuthLoginActionCreator(false));
+      showErrorDialog(error.message);
+    }
   };
 }
 
-export function asyncLogout() {
-  return async (dispatch: AppDispatch): Promise<void> => {
-    await callApi(() => logoutUser(), true);
-    removeAccessToken();
-    dispatch(logoutActionCreator());
+// Register
+export function setIsAuthRegisterActionCreator(isAuthRegister) {
+  return {
+    type: ActionType.SET_IS_AUTH_REGISTER,
+    payload: isAuthRegister,
+  };
+}
+
+export function asyncSetIsAuthRegister(name, email, password) {
+  return async (dispatch) => {
+    try {
+      const message = await authApi.postRegister(name, email, password);
+      dispatch(setIsAuthRegisterActionCreator(true));
+      showSuccessDialog(message);
+    } catch (error) {
+      dispatch(setIsAuthRegisterActionCreator(false));
+      showErrorDialog(error.message);
+    }
+  };
+}
+
+// Logout
+export function setIsAuthLogoutActionCreator(isAuthLogout) {
+  return {
+    type: ActionType.SET_IS_AUTH_LOGOUT,
+    payload: isAuthLogout,
+  };
+}
+
+export function asyncSetIsAuthLogout() {
+  return async (dispatch) => {
+    try {
+      await authApi.postLogout();
+    } catch (error) {
+      // Still proceed with clearing token locally even if server error
+    } finally {
+      apiHelper.putAccessToken("");
+      dispatch(setIsAuthLogoutActionCreator(true));
+    }
   };
 }

@@ -1,71 +1,201 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import postApi from "./postApi";
+import apiHelper from "../../../helpers/apiHelper";
 
-vi.mock('@/helpers/apiHelper', () => ({ apiFetch: vi.fn().mockResolvedValue({ status: 'success' }) }));
+function mockResponse(body: unknown) {
+  return vi.spyOn(apiHelper, "fetchData").mockResolvedValue({
+    json: async () => body,
+  } as Response);
+}
 
-import { apiFetch } from '@/helpers/apiHelper';
-import * as api from '@/features/posts/api/postApi';
-
-const lastCall = () => vi.mocked(apiFetch).mock.calls.at(-1)!;
-
-describe('postApi', () => {
-  it('getPosts semua postingan tanpa is_me', async () => {
-    await api.getPosts(false);
-    expect(apiFetch).toHaveBeenCalledWith('/posts', { params: { is_me: undefined } });
+describe("postApi", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('getPosts milik sendiri dengan is_me=1', async () => {
-    await api.getPosts(true);
-    expect(apiFetch).toHaveBeenCalledWith('/posts', { params: { is_me: 1 } });
+  describe("postPost", () => {
+    it("should create a post and return data", async () => {
+      const spy = mockResponse({ status: "success", data: { post_id: 6 } });
+      expect(await postApi.postPost("Halo")).toEqual({ post_id: 6 });
+      const [url, options] = spy.mock.calls[0];
+      expect(url).toContain("/posts/");
+      expect(options?.method).toBe("POST");
+      expect(JSON.parse(options?.body as string)).toEqual({ description: "Halo" });
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Tidak valid" });
+      await expect(postApi.postPost("")).rejects.toThrow("Tidak valid");
+      mockResponse({ status: "fail" });
+      await expect(postApi.postPost("")).rejects.toThrow("Gagal menambahkan postingan");
+    });
   });
 
-  it('getPost', async () => {
-    await api.getPost(7);
-    expect(apiFetch).toHaveBeenCalledWith('/posts/7', {});
+  describe("postPostCover", () => {
+    it("should upload cover using FormData", async () => {
+      const spy = mockResponse({ status: "success", message: "Berhasil mengubah cover" });
+      const file = new File(["x"], "c.png", { type: "image/png" });
+      expect(await postApi.postPostCover(4, file)).toBe("Berhasil mengubah cover");
+      const [url, options] = spy.mock.calls[0];
+      expect(url).toContain("/posts/4/cover");
+      expect((options?.body as FormData).get("cover")).toBeInstanceOf(File);
+    });
+
+    it("should fall back to default file name", async () => {
+      const spy = mockResponse({ status: "success", message: "ok" });
+      const blob = new Blob(["x"]);
+      Object.defineProperty(blob, "name", { value: "" });
+      await postApi.postPostCover(4, blob as File);
+      expect(((spy.mock.calls[0][1]?.body as FormData).get("cover") as File).name).toBe(
+        "cover.jpg"
+      );
+    });
+
+    it("should throw API message or fallback", async () => {
+      const file = new File(["x"], "c.png");
+      mockResponse({ status: "fail", message: "Terlalu besar" });
+      await expect(postApi.postPostCover(4, file)).rejects.toThrow("Terlalu besar");
+      mockResponse({ status: "fail" });
+      await expect(postApi.postPostCover(4, file)).rejects.toThrow("Gagal mengubah cover");
+    });
   });
 
-  it('addPost', async () => {
-    await api.addPost('halo');
-    expect(apiFetch).toHaveBeenCalledWith('/posts', { method: 'POST', body: { description: 'halo' } });
+  describe("putPost", () => {
+    it("should update description", async () => {
+      const spy = mockResponse({ status: "success", message: "Berhasil" });
+      expect(await postApi.putPost(3, "Baru")).toBe("Berhasil");
+      const [url, options] = spy.mock.calls[0];
+      expect(url).toContain("/posts/3");
+      expect(options?.method).toBe("PUT");
+      expect(JSON.parse(options?.body as string)).toEqual({ description: "Baru" });
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.putPost(3, "x")).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.putPost(3, "x")).rejects.toThrow("Gagal mengubah postingan");
+    });
   });
 
-  it('changePost', async () => {
-    await api.changePost(7, 'baru');
-    expect(apiFetch).toHaveBeenCalledWith('/posts/7', { method: 'PUT', body: { description: 'baru' } });
+  describe("getPosts", () => {
+    it("should fetch all posts", async () => {
+      const spy = mockResponse({ status: "success", data: { posts: [{ id: 1 }] } });
+      expect(await postApi.getPosts()).toEqual([{ id: 1 }]);
+      expect(spy.mock.calls[0][0]).toMatch(/\/posts\/$/);
+    });
+
+    it("should fetch only my posts", async () => {
+      const spy = mockResponse({ status: "success", data: { posts: [] } });
+      await postApi.getPosts(true);
+      expect(spy.mock.calls[0][0]).toMatch(/\/posts\/\?is_me=1$/);
+    });
+
+    it("should return empty array when data missing", async () => {
+      mockResponse({ status: "success" });
+      expect(await postApi.getPosts()).toEqual([]);
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Gagal" });
+      await expect(postApi.getPosts()).rejects.toThrow("Gagal");
+      mockResponse({ status: "fail" });
+      await expect(postApi.getPosts()).rejects.toThrow("Gagal mengambil data postingan");
+    });
   });
 
-  it('changePostCover mengirim FormData', async () => {
-    const file = new File(['x'], 'c.png', { type: 'image/png' });
-    await api.changePostCover(7, file);
-    const [path, options] = lastCall();
-    expect(path).toBe('/posts/7/cover');
-    expect(options.method).toBe('POST');
-    expect(options.formData?.get('cover')).toBe(file);
+  describe("getPostById", () => {
+    it("should return the post", async () => {
+      mockResponse({ status: "success", data: { post: { id: 7 } } });
+      expect(await postApi.getPostById(7)).toEqual({ id: 7 });
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Tidak ada" });
+      await expect(postApi.getPostById(7)).rejects.toThrow("Tidak ada");
+      mockResponse({ status: "fail" });
+      await expect(postApi.getPostById(7)).rejects.toThrow("Gagal mengambil detail postingan");
+    });
   });
 
-  it('deletePost', async () => {
-    await api.deletePost(7);
-    expect(apiFetch).toHaveBeenCalledWith('/posts/7', { method: 'DELETE' });
+  describe("deletePost", () => {
+    it("should delete a post", async () => {
+      const spy = mockResponse({ status: "success", message: "Dihapus" });
+      expect(await postApi.deletePost(2)).toBe("Dihapus");
+      expect(spy.mock.calls[0][1]?.method).toBe("DELETE");
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.deletePost(2)).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.deletePost(2)).rejects.toThrow("Gagal menghapus postingan");
+    });
   });
 
-  it('likePost memberi dan membatalkan suka', async () => {
-    await api.likePost(7, true);
-    expect(lastCall()).toEqual(['/posts/7/likes', { method: 'POST', body: { like: 1 } }]);
-    await api.likePost(7, false);
-    expect(lastCall()).toEqual(['/posts/7/likes', { method: 'POST', body: { like: 0 } }]);
+  describe("postPostLike", () => {
+    it("should send like 1 and 0", async () => {
+      const spy = mockResponse({ status: "success", message: "Berhasil" });
+      await postApi.postPostLike(2, true);
+      await postApi.postPostLike(2, false);
+      expect(spy.mock.calls[0][0]).toContain("/posts/2/likes");
+      expect(JSON.parse(spy.mock.calls[0][1]?.body as string)).toEqual({ like: 1 });
+      expect(JSON.parse(spy.mock.calls[1][1]?.body as string)).toEqual({ like: 0 });
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.postPostLike(2, true)).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.postPostLike(2, true)).rejects.toThrow("Gagal mengubah status suka");
+    });
   });
 
-  it('addComment', async () => {
-    await api.addComment(7, 'keren');
-    expect(apiFetch).toHaveBeenCalledWith('/posts/7/comments', { method: 'POST', body: { comment: 'keren' } });
+  describe("postPostComment", () => {
+    it("should add a comment", async () => {
+      const spy = mockResponse({ status: "success", message: "Berhasil" });
+      expect(await postApi.postPostComment(2, "Keren")).toBe("Berhasil");
+      expect(spy.mock.calls[0][0]).toContain("/posts/2/comments");
+      expect(JSON.parse(spy.mock.calls[0][1]?.body as string)).toEqual({ comment: "Keren" });
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.postPostComment(2, "x")).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.postPostComment(2, "x")).rejects.toThrow("Gagal menambahkan komentar");
+    });
   });
 
-  it('deleteComment', async () => {
-    await api.deleteComment(7);
-    expect(apiFetch).toHaveBeenCalledWith('/posts/7/comments', { method: 'DELETE' });
+  describe("deletePostComment", () => {
+    it("should delete my comment", async () => {
+      const spy = mockResponse({ status: "success", message: "Dihapus" });
+      expect(await postApi.deletePostComment(2)).toBe("Dihapus");
+      expect(spy.mock.calls[0][0]).toContain("/posts/2/comments");
+      expect(spy.mock.calls[0][1]?.method).toBe("DELETE");
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.deletePostComment(2)).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.deletePostComment(2)).rejects.toThrow("Gagal menghapus komentar");
+    });
   });
 
-  it('deleteAllPosts', async () => {
-    await api.deleteAllPosts();
-    expect(apiFetch).toHaveBeenCalledWith('/posts', { method: 'DELETE' });
+  describe("deleteAllPosts", () => {
+    it("should delete all my posts", async () => {
+      const spy = mockResponse({ status: "success", message: "Semua dihapus" });
+      expect(await postApi.deleteAllPosts()).toBe("Semua dihapus");
+      expect(spy.mock.calls[0][0]).toMatch(/\/posts\/$/);
+      expect(spy.mock.calls[0][1]?.method).toBe("DELETE");
+    });
+
+    it("should throw API message or fallback", async () => {
+      mockResponse({ status: "fail", message: "Ditolak" });
+      await expect(postApi.deleteAllPosts()).rejects.toThrow("Ditolak");
+      mockResponse({ status: "fail" });
+      await expect(postApi.deleteAllPosts()).rejects.toThrow("Gagal menghapus semua postingan");
+    });
   });
 });

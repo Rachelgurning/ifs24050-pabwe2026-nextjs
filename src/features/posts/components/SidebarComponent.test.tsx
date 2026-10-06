@@ -1,50 +1,68 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import SidebarComponent from '@/features/posts/components/SidebarComponent';
-import { navState } from '@/navigationMock';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent } from "@testing-library/react";
+import SidebarComponent from "./SidebarComponent";
+import { renderWithProviders } from "../../../test-utils";
 
-function current() {
-  return screen
-    .getAllByRole('link')
-    .filter((link) => link.getAttribute('aria-current') === 'page')
-    .map((link) => link.textContent);
+const nav = vi.hoisted(() => ({ pathname: "/", tab: null as string | null }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.tab ? { tab: nav.tab } : {}),
+  useRouter: () => ({ push: vi.fn() }),
+  useParams: () => ({}),
+}));
+
+function renderSidebar(open = false, onClose = vi.fn()) {
+  return renderWithProviders(
+    <SidebarComponent isSidebarOpen={open} onCloseMobile={onClose} />
+  );
 }
 
-describe('SidebarComponent', () => {
-  it('menampilkan empat rute utama', () => {
-    render(<SidebarComponent open={false} onClose={vi.fn()} />);
-    expect(screen.getByRole('navigation', { name: 'Navigasi utama' })).toBeInTheDocument();
-    expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual([
-      'Semua Postingan',
-      'Postingan Saya',
-      'Daftar Pengguna',
-      'Profil Saya',
-    ]);
-    expect(screen.getByRole('complementary', { name: 'Menu samping' })).toHaveClass('invisible');
+describe("SidebarComponent", () => {
+  beforeEach(() => {
+    nav.pathname = "/";
+    nav.tab = null;
   });
 
-  it.each([
-    ['/', '', 'Semua Postingan'],
-    ['/', 'filter=me', 'Postingan Saya'],
-    ['/users', '', 'Daftar Pengguna'],
-    ['/profile', '', 'Profil Saya'],
-  ])('menandai rute aktif untuk %s?%s', (pathname, search, label) => {
-    navState.pathname = pathname;
-    navState.search = search;
-    render(<SidebarComponent open={false} onClose={vi.fn()} />);
-    expect(current()).toEqual([label]);
+  it("should render all navigation links", () => {
+    renderSidebar();
+    ["Semua Postingan", "Postingan Saya", "Daftar Pengguna", "Profil Saya"].forEach(
+      (label) => expect(screen.getByText(label)).toBeInTheDocument()
+    );
+    expect(screen.queryByTestId("sidebar-backdrop")).not.toBeInTheDocument();
   });
 
-  it('drawer terbuka: overlay dan link menutup drawer', async () => {
+  it("should mark 'Semua Postingan' active on the timeline", () => {
+    renderSidebar();
+    expect(screen.getByText("Semua Postingan").closest("a")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Postingan Saya").closest("a")).not.toHaveAttribute("aria-current");
+  });
+
+  it("should mark 'Postingan Saya' active for tab=me", () => {
+    nav.tab = "me";
+    renderSidebar();
+    expect(screen.getByText("Postingan Saya").closest("a")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Semua Postingan").closest("a")).not.toHaveAttribute("aria-current");
+  });
+
+  it("should mark other pages active by pathname", () => {
+    nav.pathname = "/users";
+    renderSidebar();
+    expect(screen.getByText("Daftar Pengguna").closest("a")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Semua Postingan").closest("a")).not.toHaveAttribute("aria-current");
+  });
+
+  it("should render backdrop and close on click", () => {
     const onClose = vi.fn();
-    const { container } = render(<SidebarComponent open onClose={onClose} />);
-    expect(screen.getByRole('complementary', { name: 'Menu samping' })).toHaveClass('visible');
+    renderSidebar(true, onClose);
+    fireEvent.click(screen.getByTestId("sidebar-backdrop"));
+    expect(onClose).toHaveBeenCalled();
+  });
 
-    await userEvent.click(container.querySelector('[aria-hidden="true"].fixed')!);
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    await userEvent.click(screen.getByRole('link', { name: 'Daftar Pengguna' }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+  it("should close mobile sidebar when a link is clicked", () => {
+    const onClose = vi.fn();
+    renderSidebar(true, onClose);
+    fireEvent.click(screen.getByText("Profil Saya"));
+    expect(onClose).toHaveBeenCalled();
   });
 });

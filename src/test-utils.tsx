@@ -1,53 +1,97 @@
-import { render } from '@testing-library/react';
-import type { ReactElement } from 'react';
-import { Provider } from 'react-redux';
-import { makeStore } from '@/store';
-import type { RootState } from '@/store';
-import type { ApiResult, Post, PostDetail, User } from '@/types';
+import React from "react";
+import { render } from "@testing-library/react";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import {
+  isAuthLoginReducer,
+  isAuthRegisterReducer,
+  isAuthLogoutReducer,
+} from "./features/auth/states/reducer";
+import {
+  usersReducer,
+  userReducer,
+  profileReducer,
+  isProfileReducer,
+  isChangeProfileReducer,
+  isChangeProfilePhotoReducer,
+  isChangeProfilePasswordReducer,
+} from "./features/users/states/reducer";
+import {
+  postsReducer,
+  postReducer,
+  isPostReducer,
+  isPostAddReducer,
+  isPostAddedReducer,
+  isPostChangeReducer,
+  isPostChangedReducer,
+  isPostChangeCoverReducer,
+  isPostChangedCoverReducer,
+  isPostDeleteReducer,
+  isPostDeletedReducer,
+  isPostLikeReducer,
+  isPostLikedReducer,
+  isPostAddCommentReducer,
+  isPostAddedCommentReducer,
+  isPostDeleteCommentReducer,
+  isPostDeletedCommentReducer,
+  isPostDeleteAllReducer,
+  isPostDeletedAllReducer,
+} from "./features/posts/states/reducer";
 
-export function renderWithProviders(ui: ReactElement, preloadedState?: Partial<RootState>) {
-  const store = makeStore(preloadedState);
-  return { store, ...render(<Provider store={store}>{ui}</Provider>) };
+export function createMockStore(preloadedState = {}) {
+  return configureStore({
+    reducer: {
+      isAuthLogin: isAuthLoginReducer,
+      isAuthRegister: isAuthRegisterReducer,
+      isAuthLogout: isAuthLogoutReducer,
+      users: usersReducer,
+      user: userReducer,
+      profile: profileReducer,
+      isProfile: isProfileReducer,
+      isChangeProfile: isChangeProfileReducer,
+      isChangeProfilePhoto: isChangeProfilePhotoReducer,
+      isChangeProfilePassword: isChangeProfilePasswordReducer,
+      posts: postsReducer,
+      post: postReducer,
+      isPost: isPostReducer,
+      isPostAdd: isPostAddReducer,
+      isPostAdded: isPostAddedReducer,
+      isPostChange: isPostChangeReducer,
+      isPostChanged: isPostChangedReducer,
+      isPostChangeCover: isPostChangeCoverReducer,
+      isPostChangedCover: isPostChangedCoverReducer,
+      isPostDelete: isPostDeleteReducer,
+      isPostDeleted: isPostDeletedReducer,
+      isPostLike: isPostLikeReducer,
+      isPostLiked: isPostLikedReducer,
+      isPostAddComment: isPostAddCommentReducer,
+      isPostAddedComment: isPostAddedCommentReducer,
+      isPostDeleteComment: isPostDeleteCommentReducer,
+      isPostDeletedComment: isPostDeletedCommentReducer,
+      isPostDeleteAll: isPostDeleteAllReducer,
+      isPostDeletedAll: isPostDeletedAllReducer,
+    },
+    preloadedState,
+    middleware: (getDefaultMiddleware) =>
+      getDefaultMiddleware({
+        // Dev-only checks are slow under Vitest/jsdom and spam stderr.
+        serializableCheck: false,
+        immutableCheck: false,
+      }),
+  });
 }
 
-export const ok = <T,>(data?: T, message = 'Berhasil') => ({
-  status: 'success' as const,
-  message,
-  data,
-});
+export function renderWithProviders(
+  ui,
+  {
+    preloadedState = {},
+    store = createMockStore(preloadedState),
+    ...renderOptions
+  } = {}
+) {
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return <Provider store={store}>{children}</Provider>;
+  }
 
-export const fail = (message = 'Gagal', data?: Record<string, string[]>): ApiResult<never> => ({
-  status: 'fail',
-  message,
-  data: data as never,
-});
-
-export const makeUser = (overrides: Partial<User> = {}): User => ({
-  id: 1,
-  name: 'Stiy Del',
-  email: 'ifs24050@del.ac.id',
-  photo: null,
-  created_at: '2026-10-01T00:00:00.000000Z',
-  updated_at: '2026-10-01T00:00:00.000000Z',
-  ...overrides,
-});
-
-export const makePost = (overrides: Partial<Post> = {}): Post => ({
-  id: 10,
-  user_id: 2,
-  cover: 'http://open-api.delcom.org/img/posts/cover/a.jpeg',
-  description: 'Belajar Next.js itu seru',
-  created_at: '2026-10-02T03:07:11.000000Z',
-  updated_at: '2026-10-02T03:07:11.000000Z',
-  author: { name: 'Budi', photo: null },
-  likes: [],
-  comments: [],
-  ...overrides,
-});
-
-export const makePostDetail = (overrides: Partial<PostDetail> = {}): PostDetail => ({
-  ...makePost(),
-  comments: [],
-  my_comment: null,
-  ...overrides,
-});
+  return { store, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
+}

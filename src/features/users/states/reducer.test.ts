@@ -1,56 +1,61 @@
-import { describe, expect, it } from 'vitest';
-import { AuthActionType } from '@/features/auth/states/action';
+import { describe, it, expect } from "vitest";
 import {
-  UserActionType,
-  profileMutationActionCreator,
-  receiveProfileActionCreator,
-  receiveUserActionCreator,
-  receiveUsersActionCreator,
-} from '@/features/users/states/action';
-import {
-  isChangeProfile,
-  isChangeProfilePassword,
-  isChangeProfilePhoto,
-  isProfile,
-  profile,
-  user,
-  users,
-} from '@/features/users/states/reducer';
-import { makeUser } from '@/test-utils';
+  usersReducer,
+  userReducer,
+  profileReducer,
+  isProfileReducer,
+  isChangeProfileReducer,
+  isChangeProfilePhotoReducer,
+  isChangeProfilePasswordReducer,
+} from "./reducer";
+import { ActionType } from "./action";
 
-const logout = { type: AuthActionType.LOGOUT };
-
-describe('users reducers', () => {
-  it('users', () => {
-    const list = [makeUser()];
-    expect(users(undefined, { type: 'x' })).toEqual([]);
-    expect(users([], receiveUsersActionCreator(list))).toBe(list);
-    expect(users(list, logout)).toEqual([]);
+describe("users reducer", () => {
+  it("should return the default state for unknown actions", () => {
+    expect(usersReducer(undefined, {})).toEqual([]);
+    expect(userReducer(undefined, {})).toBeNull();
+    expect(profileReducer(undefined, {})).toBeNull();
+    expect(isProfileReducer(undefined, {})).toBe(false);
+    expect(isChangeProfileReducer(undefined, {})).toBe(false);
+    expect(isChangeProfilePhotoReducer(undefined, {})).toBe(false);
+    expect(isChangeProfilePasswordReducer(undefined, {})).toBe(false);
   });
 
-  it('user', () => {
-    const u = makeUser();
-    expect(user(undefined, { type: 'x' })).toBeNull();
-    expect(user(null, receiveUserActionCreator(u))).toBe(u);
-    expect(user(u, logout)).toBeNull();
+  it("should handle SET_USERS", () => {
+    const action = { type: ActionType.SET_USERS, payload: [{ id: 1 }] };
+    expect(usersReducer([], action)).toEqual([{ id: 1 }]);
   });
 
-  it('profile & isProfile', () => {
-    const u = makeUser();
-    expect(profile(undefined, { type: UserActionType.RECEIVE_USER })).toBeNull();
-    expect(profile(null, receiveProfileActionCreator(u))).toBe(u);
-    expect(profile(u, logout)).toBeNull();
-    expect(isProfile(false, receiveProfileActionCreator(u))).toBe(true);
-    expect(isProfile(true, logout)).toBe(false);
+  it("should handle SET_USER", () => {
+    const action = { type: ActionType.SET_USER, payload: { id: 1 } };
+    expect(userReducer(null, action)).toEqual({ id: 1 });
   });
 
-  it.each([
-    ['change', isChangeProfile],
-    ['changePhoto', isChangeProfilePhoto],
-    ['changePassword', isChangeProfilePassword],
-  ] as const)('flag proses %s', (name, reducer) => {
-    expect(reducer(false, profileMutationActionCreator(name, 'request'))).toBe(true);
-    expect(reducer(true, profileMutationActionCreator(name, 'success'))).toBe(false);
-    expect(reducer(true, profileMutationActionCreator(name, 'failure'))).toBe(false);
+  it("should handle SET_PROFILE", () => {
+    const action = { type: ActionType.SET_PROFILE, payload: { id: 2 } };
+    expect(profileReducer(null, action)).toEqual({ id: 2 });
+  });
+
+  it("should handle SET_IS_PROFILE", () => {
+    const action = { type: ActionType.SET_IS_PROFILE, payload: true };
+    expect(isProfileReducer(false, action)).toBe(true);
+  });
+
+  it("should handle SET_IS_CHANGE_PROFILE", () => {
+    const action = { type: ActionType.SET_IS_CHANGE_PROFILE, payload: true };
+    expect(isChangeProfileReducer(false, action)).toBe(true);
+  });
+
+  it("should handle SET_IS_CHANGE_PROFILE_PHOTO", () => {
+    const action = { type: ActionType.SET_IS_CHANGE_PROFILE_PHOTO, payload: true };
+    expect(isChangeProfilePhotoReducer(false, action)).toBe(true);
+  });
+
+  it("should handle SET_IS_CHANGE_PROFILE_PASSWORD", () => {
+    const action = {
+      type: ActionType.SET_IS_CHANGE_PROFILE_PASSWORD,
+      payload: true,
+    };
+    expect(isChangeProfilePasswordReducer(false, action)).toBe(true);
   });
 });

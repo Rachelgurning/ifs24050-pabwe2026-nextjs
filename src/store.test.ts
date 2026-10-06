@@ -1,28 +1,38 @@
-import { describe, expect, it } from 'vitest';
-import { makeStore, reducer, store } from '@/store';
+import { describe, it, expect } from "vitest";
+import store from "./store";
+import { setIsAuthLoginActionCreator } from "./features/auth/states/action";
 
-describe('store', () => {
-  it('menggabungkan seluruh reducer auth, users, dan posts', () => {
-    const keys = Object.keys(store.getState()).sort();
-    expect(keys).toEqual(Object.keys(reducer).sort());
-    expect(keys).toEqual(
-      expect.arrayContaining([
-        'isAuthLogin',
-        'isAuthRegister',
-        'isAuthLogout',
-        'users',
-        'profile',
-        'posts',
-        'post',
-        'isPostLike',
-        'isPostDeletedAll',
-      ]),
-    );
-  });
+describe("Redux store configuration", () => {
+  it("should contain all expected reducer keys and update state properly", () => {
+    const state = store.getState();
 
-  it('makeStore menerima preloaded state', () => {
-    const custom = makeStore({ isProfile: true });
-    expect(custom.getState().isProfile).toBe(true);
-    expect(custom.getState().posts).toEqual([]);
+    // Verify all keys exist
+    expect(state).toHaveProperty("isAuthLogin");
+    expect(state).toHaveProperty("isAuthRegister");
+    expect(state).toHaveProperty("isAuthLogout");
+    expect(state).toHaveProperty("users");
+    expect(state).toHaveProperty("user");
+    expect(state).toHaveProperty("profile");
+    expect(state).toHaveProperty("isProfile");
+    expect(state).toHaveProperty("isChangeProfile");
+    expect(state).toHaveProperty("isChangeProfilePhoto");
+    expect(state).toHaveProperty("isChangeProfilePassword");
+    expect(state).toHaveProperty("posts");
+    expect(state).toHaveProperty("post");
+    expect(state).toHaveProperty("isPost");
+    expect(state).toHaveProperty("isPostAdd");
+    expect(state).toHaveProperty("isPostAdded");
+    expect(state).toHaveProperty("isPostChange");
+    expect(state).toHaveProperty("isPostChanged");
+    expect(state).toHaveProperty("isPostChangeCover");
+    expect(state).toHaveProperty("isPostChangedCover");
+    expect(state).toHaveProperty("isPostDelete");
+    expect(state).toHaveProperty("isPostDeleted");
+    expect(state).toHaveProperty("isPostLiked");
+    expect(state).toHaveProperty("isPostDeletedAll");
+
+    // Test dispatching an action
+    store.dispatch(setIsAuthLoginActionCreator(true));
+    expect(store.getState().isAuthLogin).toBe(true);
   });
 });

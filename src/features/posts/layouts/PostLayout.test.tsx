@@ -1,69 +1,109 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { screen, fireEvent } from "@testing-library/react";
+import PostLayout from "./PostLayout";
+import { renderWithProviders } from "../../../test-utils";
+import apiHelper from "../../../helpers/apiHelper";
 
-vi.mock('@/features/users/api/userApi');
-vi.mock('@/helpers/toolsHelper', () => ({
-  showErrorDialog: vi.fn(),
-  showSuccessDialog: vi.fn(),
-  showConfirmDialog: vi.fn(),
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+  useParams: () => ({}),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-import { getAccessToken, putAccessToken } from '@/helpers/apiHelper';
-import { getProfile } from '@/features/users/api/userApi';
-import PostLayout from '@/features/posts/layouts/PostLayout';
-import { routerMock } from '@/navigationMock';
-import { fail, makeUser, ok, renderWithProviders } from '@/test-utils';
-
-describe('PostLayout', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('tanpa token: mengalihkan ke login dan menahan konten', () => {
-    renderWithProviders(
-      <PostLayout>
-        <p>Rahasia</p>
-      </PostLayout>,
-    );
-    expect(routerMock.replace).toHaveBeenCalledWith('/auth/login');
-    expect(screen.queryByText('Rahasia')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Memuat sesi Anda...');
+describe("PostLayout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('dengan token valid: memuat profil lalu menampilkan shell dashboard', async () => {
-    putAccessToken('tok');
-    vi.mocked(getProfile).mockResolvedValue(ok({ user: makeUser() }));
-    renderWithProviders(
-      <PostLayout>
-        <p>Konten Dashboard</p>
-      </PostLayout>,
-    );
-    expect(await screen.findByText('Konten Dashboard')).toBeInTheDocument();
-    expect(screen.getByRole('banner')).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Navigasi utama' })).toBeInTheDocument();
-    expect(screen.getByRole('main')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Lewati ke konten utama' })).toHaveAttribute('href', '#main-content');
-    expect(routerMock.replace).not.toHaveBeenCalled();
+  it("should redirect to login if access token does not exist", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue(null);
+
+    renderWithProviders(<PostLayout />, {
+      preloadedState: {
+        profile: null,
+      },
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/auth/login");
+    expect(screen.getByText("Memuat sesi pengguna...")).toBeInTheDocument();
   });
 
-  it('token tidak valid: token dihapus dan menuju login', async () => {
-    putAccessToken('kedaluwarsa');
-    vi.mocked(getProfile).mockResolvedValue(fail('Unauthenticated.'));
-    renderWithProviders(<PostLayout>x</PostLayout>);
-    await waitFor(() => expect(routerMock.replace).toHaveBeenCalledWith('/auth/login'));
-    expect(getAccessToken()).toBeNull();
+  it("should render layout with navbar and sidebar when profile is present and handle sidebar toggling & logout", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("valid-token");
+
+    renderWithProviders(<PostLayout />, {
+      preloadedState: {
+        profile: {
+          id: 1,
+          name: "Test User",
+          email: "test@delcom.org",
+        },
+      },
+    });
+
+    expect(screen.getByText("Delcom Post")).toBeInTheDocument();
+    expect(screen.getByText("Test User")).toBeInTheDocument();
+
+    // Toggle sidebar
+    const toggleBtn = screen.getByTestId("toggle-sidebar-btn");
+    fireEvent.click(toggleBtn);
+
+    // Click backdrop to close mobile sidebar
+    const backdrop = screen.getByTestId("sidebar-backdrop");
+    fireEvent.click(backdrop);
+
+    // Trigger logout from navbar
+    const dropdownBtn = screen.getByTestId("profile-dropdown-button");
+    fireEvent.click(dropdownBtn);
+    const logoutBtn = screen.getByTestId("dropdown-logout-button");
+    fireEvent.click(logoutBtn);
   });
 
-  it('drawer mobile dibuka lewat navbar dan ditutup lewat sidebar', async () => {
-    putAccessToken('tok');
-    vi.mocked(getProfile).mockResolvedValue(ok({ user: makeUser() }));
-    renderWithProviders(<PostLayout>isi</PostLayout>);
-    await screen.findByText('isi');
+  it("should stay on page when isProfile is triggered and profile exists", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("valid-token");
 
-    const drawer = screen.getByRole('complementary', { name: 'Menu samping' });
-    expect(drawer).toHaveClass('invisible');
-    await userEvent.click(screen.getByRole('button', { name: 'Buka menu navigasi' }));
-    expect(drawer).toHaveClass('visible');
-    await userEvent.click(screen.getByRole('link', { name: 'Daftar Pengguna' }));
-    expect(drawer).toHaveClass('invisible');
+    renderWithProviders(<PostLayout />, {
+      preloadedState: {
+        profile: { id: 1, name: "Logged User" },
+        isProfile: true,
+      },
+    });
+
+    expect(screen.getByText("Logged User")).toBeInTheDocument();
+  });
+
+  it("should redirect to login when isProfile is triggered and profile is null", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("valid-token");
+    const putTokenSpy = vi.spyOn(apiHelper, "putAccessToken").mockImplementation(() => {});
+
+    renderWithProviders(<PostLayout />, {
+      preloadedState: {
+        profile: null,
+        isProfile: true,
+      },
+    });
+
+    expect(putTokenSpy).toHaveBeenCalledWith("");
+    expect(mockPush).toHaveBeenCalledWith("/auth/login");
+  });
+
+  it("should redirect to login when isAuthLogout is true", () => {
+    vi.spyOn(apiHelper, "getAccessToken").mockReturnValue("valid-token");
+
+    renderWithProviders(<PostLayout />, {
+      preloadedState: {
+        profile: { id: 1, name: "Logged User" },
+        isAuthLogout: true,
+      },
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/auth/login");
   });
 });
